@@ -1,0 +1,43 @@
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const stats = JSON.parse('{{ graph_stats|escapejs }}');
+        
+        const ctx = document.getElementById('resultsChart').getContext('2d');
+        new Chart(ctx, {
+            type: 'radar',
+            data: {
+                labels: ['Deliverable', 'Risky', 'Undeliverable', 'Disposable', 'Role Based', 'SMTP Success'],
+                datasets: [{
+                    label: 'Batch Metrics (%)',
+                    data: [
+                        stats.deliverable,
+                        stats.risky,
+                        stats.undeliverable,
+                        stats.disposable,
+                        stats.role_based,
+                        stats.smtp_success
+                    ],
+                    backgroundColor: 'rgba(59, 130, 246, 0.2)',
+                    borderColor: 'rgba(59, 130, 246, 1)',
+                    pointBackgroundColor: 'rgba(59, 130, 246, 1)',
+                    borderWidth: 2
+                }]
+            },
+            options: {
+                scales: {
+                    r: {
+                        angleLines: { color: 'rgba(255, 255, 255, 0.1)' },
+                        grid: { color: 'rgba(255, 255, 255, 0.1)' },
+                        pointLabels: { color: '#9ca3af', font: { size: 12 } },
+                        ticks: { backdropColor: 'transparent', color: '#9ca3af', showLabelBackdrop: false }
+                    }
+                },
+                plugins: {
+                    legend: { labels: { color: '#fff' } }
+                }
+            }
+        });
+    });
+</script>
+{% endblock %}

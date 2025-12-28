@@ -1,0 +1,16 @@
+django
+djangorestframework
+celery
+redis
+django-environ
+pandas
+tqdm
+email-validator
+python-whois
+tldextract
+aiodns
+dnspython
+openpyxl
+pillow
+whitenoise
+PySocks

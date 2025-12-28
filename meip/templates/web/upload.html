@@ -1,0 +1,143 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="max-w-2xl mx-auto space-y-8">
+    <div class="text-center">
+        <h1 class="text-3xl font-bold text-white">Upload CSV Batch</h1>
+        <p class="text-gray-400 mt-2">Process large lists of emails asynchronously.</p>
+    </div>
+
+    <div class="bg-dark-800 border border-dark-700 rounded-xl p-8 shadow-lg text-center">
+        <form method="post" enctype="multipart/form-data" class="space-y-6">
+            {% csrf_token %}
+
+            <div id="drop-zone"
+                class="flex justify-center px-6 pt-5 pb-6 border-2 border-dark-600 border-dashed rounded-md hover:border-accent-500 transition-all cursor-pointer group relative overflow-hidden">
+
+                <!-- Success Background (Hidden by default) -->
+                <div id="success-bg" class="absolute inset-0 bg-accent-500/10 hidden transition-opacity"></div>
+
+                <div class="space-y-1 text-center relative z-10">
+                    <div id="icon-container">
+                        <svg class="mx-auto h-12 w-12 text-gray-400 group-hover:text-accent-500 transition-colors"
+                            stroke="currentColor" fill="none" viewBox="0 0 48 48" aria-hidden="true">
+                            <path
+                                d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8m-12 4h.02"
+                                stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+                        </svg>
+                    </div>
+
+                    <div class="flex text-sm text-gray-400 justify-center flex-col">
+                        <label for="file-upload"
+                            class="relative cursor-pointer bg-transparent rounded-md font-medium text-accent-500 hover:text-accent-400 focus-within:outline-none">
+                            <span id="file-label-text">Click to Upload</span>
+                            <input id="file-upload" name="csv_file" type="file" class="sr-only" accept=".csv" required>
+                        </label>
+                        <p class="pl-1 mt-1 text-gray-500" id="drag-text">or drag and drop CSV here</p>
+                    </div>
+                    <p class="text-xs text-gray-500 mt-4" id="file-info">
+                        CSV up to 50MB. Must contain "Email" column.
+                    </p>
+                </div>
+            </div>
+
+            <button type="submit" id="upload-btn"
+                class="w-full flex justify-center py-3 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-dark-600 cursor-not-allowed transition-all shadow-md"
+                disabled>
+                Select a File First
+            </button>
+        </form>
+    </div>
+</div>
+
+<script>
+    const dropZone = document.getElementById('drop-zone');
+    const fileInput = document.getElementById('file-upload');
+    const uploadBtn = document.getElementById('upload-btn');
+    const fileLabelText = document.getElementById('file-label-text');
+    const dragText = document.getElementById('drag-text');
+    const fileInfo = document.getElementById('file-info');
+    const iconContainer = document.getElementById('icon-container');
+    const successBg = document.getElementById('success-bg');
+
+    // Prevent default drag behaviors
+    ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+        dropZone.addEventListener(eventName, preventDefaults, false);
+        document.body.addEventListener(eventName, preventDefaults, false);
+    });
+
+    function preventDefaults(e) {
+        e.preventDefault();
+        e.stopPropagation();
+    }
+
+    // Highlight drop zone when item is dragged over it
+    ['dragenter', 'dragover'].forEach(eventName => {
+        dropZone.addEventListener(eventName, highlight, false);
+    });
+
+    ['dragleave', 'drop'].forEach(eventName => {
+        dropZone.addEventListener(eventName, unhighlight, false);
+    });
+
+    function highlight(e) {
+        dropZone.classList.add('border-accent-500', 'bg-dark-700', 'scale-[1.02]');
+    }
+
+    function unhighlight(e) {
+        dropZone.classList.remove('border-accent-500', 'bg-dark-700', 'scale-[1.02]');
+    }
+
+    // Handle dropped files
+    dropZone.addEventListener('drop', handleDrop, false);
+
+    function handleDrop(e) {
+        const dt = e.dataTransfer;
+        const files = dt.files;
+        handleFiles(files);
+    }
+
+    // Handle selected files via input
+    fileInput.addEventListener('change', function () {
+        handleFiles(this.files);
+    });
+
+    function handleFiles(files) {
+        if (files.length > 0) {
+            fileInput.files = files; // Assign dropped files to input if needed
+            const file = files[0];
+
+            // UI Feedback
+            fileLabelText.textContent = file.name;
+            fileLabelText.classList.add('text-xl', 'text-white');
+            dragText.textContent = "Ready to upload";
+            fileInfo.textContent = `Size: ${(file.size / 1024).toFixed(1)} KB`;
+
+            // Change Icon to Checkmark
+            iconContainer.innerHTML = `
+                <svg class="mx-auto h-12 w-12 text-green-500 animate-bounce" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+            `;
+
+            // Show success background
+            successBg.classList.remove('hidden');
+            dropZone.classList.add('border-green-500');
+
+            // Enable and Animate Button
+            uploadBtn.disabled = false;
+            uploadBtn.classList.remove('bg-dark-600', 'cursor-not-allowed', 'text-gray-400');
+            uploadBtn.classList.add('bg-accent-600', 'hover:bg-accent-700', 'text-white', 'ring-2', 'ring-offset-2', 'ring-offset-dark-800', 'ring-accent-500', 'animate-pulse');
+            uploadBtn.textContent = "Start Processing (Click Me!)";
+        }
+    }
+
+    // Allow clicking the drop zone to trigger input (except when clicking label itself which handles it)
+    dropZone.addEventListener('click', (e) => {
+        if (e.target !== fileInput && e.target.tagName !== 'LABEL' && e.target.tagName !== 'SPAN') {
+            fileInput.click();
+        }
+    });
+
+</script>
+{% endblock %}

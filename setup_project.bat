@@ -1,0 +1,9 @@
+@echo off
+echo Setting up environment...
+python -m venv venv
+call venv\Scripts\activate
+echo Installing Django...
+pip install django
+echo Creating Project...
+django-admin startproject meip
+echo Done.

@@ -1,0 +1,35 @@
+name: meip
+
+type: python:3.10
+
+dependencies:
+    python3:
+        poetry: "*"
+
+relationships:
+    database: "db:postgresql"
+    redis: "cache:redis"
+
+disk: 2048
+
+web:
+    commands:
+        start: "gunicorn meip.wsgi:application --log-file - --workers 2"
+    upstream:
+        socket_family: unix
+
+mounts:
+    "media":
+        source: local
+        source_path: media
+    "validator/disposable_domains.txt":
+        source: local
+        source_path: disposable_domains.txt
+
+hooks:
+    build: |
+        pip install -r requirements.txt
+        python manage.py collectstatic --noinput
+
+    deploy: |
+        python manage.py migrate

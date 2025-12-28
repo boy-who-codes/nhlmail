@@ -1,0 +1,87 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="max-w-3xl mx-auto space-y-8">
+    <div class="text-center">
+        <h1 class="text-3xl font-bold text-white">Manual Email Validation</h1>
+        <p class="text-gray-400 mt-2">Check a single email address instantly.</p>
+    </div>
+
+    <div class="bg-dark-800 border border-dark-700 rounded-xl p-6 shadow-lg">
+        <form method="post" class="space-y-4"
+            onsubmit="document.getElementById('loading-overlay').classList.remove('hidden')">
+            {% csrf_token %}
+            <div>
+                <label for="email" class="block text-sm font-medium text-gray-300">Email Address</label>
+                <div class="mt-2 flex rounded-md shadow-sm">
+                    <input type="email" name="email" id="email" required
+                        class="flex-1 min-w-0 block w-full px-4 py-3 rounded-md bg-dark-900 border border-dark-600 text-white placeholder-gray-500 focus:ring-accent-500 focus:border-accent-500 sm:text-sm"
+                        placeholder="john.doe@example.com">
+                    <button type="submit"
+                        class="ml-3 inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-accent-600 hover:bg-accent-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-dark-800 focus:ring-accent-500">
+                        Validate
+                    </button>
+                </div>
+            </div>
+        </form>
+
+        <!-- Loading Overlay -->
+        <div id="loading-overlay"
+            class="hidden absolute inset-0 bg-dark-900/80 flex flex-col items-center justify-center z-50 rounded-xl backdrop-blur-sm">
+            <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-accent-500 mb-4"></div>
+            <p class="text-white font-medium animate-pulse">Running 10-Layer Validation...</p>
+        </div>
+    </div>
+    <div class="relative"> <!-- Container for form relative positioning -->
+    </div>
+
+    {% if result %}
+    <div class="bg-dark-800 border border-dark-700 rounded-xl overflow-hidden shadow-lg animate-fade-in-up">
+        <div class="px-6 py-4 border-b border-dark-700 flex justify-between items-center bg-dark-900/50">
+            <h2 class="text-lg font-semibold text-white">Result</h2>
+            <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-bold 
+                {% if result.status == 'DELIVERABLE' %}bg-green-500/10 text-green-500
+                {% elif result.status == 'RISKY' %}bg-yellow-500/10 text-yellow-500
+                {% else %}bg-red-500/10 text-red-500{% endif %}">
+                {{ result.status }}
+            </span>
+        </div>
+        <div class="p-6 grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+                <p class="text-xs font-uppercase tracking-wider text-gray-500 mb-1">RTPC Score</p>
+                <div class="flex items-center space-x-2">
+                    <span class="text-4xl font-bold text-white">{{ result.rtpc_score }}</span>
+                    <span class="text-sm text-gray-400">/ 100</span>
+                </div>
+                <p class="text-xs text-gray-500 mt-2">{{ result.reason }}</p>
+            </div>
+
+            <div class="space-y-3">
+                <div class="flex justify-between text-sm">
+                    <span class="text-gray-400">Recommendation</span>
+                    <span class="text-white font-medium">{{ result.recommendation }}</span>
+                </div>
+                <div class="flex justify-between text-sm">
+                    <span class="text-gray-400">Provider</span>
+                    <span class="text-white font-medium">{{ result.provider|default:"Unknown" }}</span>
+                </div>
+                <div class="flex justify-between text-sm">
+                    <span class="text-gray-400">Disposable</span>
+                    <span
+                        class="{% if result.is_disposable %}text-red-500{% else %}text-green-500{% endif %} font-medium">
+                        {{ result.is_disposable|yesno:"Yes,No" }}
+                    </span>
+                </div>
+                <div class="flex justify-between text-sm">
+                    <span class="text-gray-400">SMTP Check</span>
+                    <span
+                        class="{% if result.smtp_check == 'Success' %}text-green-500{% elif result.smtp_check == 'Fail' %}text-red-500{% else %}text-gray-500{% endif %} font-medium">
+                        {{ result.smtp_check }}
+                    </span>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

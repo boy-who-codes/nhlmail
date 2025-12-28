@@ -1,0 +1,6 @@
+db:
+    type: postgresql:14
+    disk: 1024
+
+cache:
+    type: redis:6.2

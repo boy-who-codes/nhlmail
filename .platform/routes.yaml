@@ -1,0 +1,7 @@
+"https://{default}/":
+    type: upstream
+    upstream: "meip:http"
+
+"http://{default}/":
+    type: redirect
+    to: "https://{default}/"

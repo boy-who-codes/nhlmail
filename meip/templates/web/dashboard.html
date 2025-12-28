@@ -1,0 +1,116 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="space-y-8">
+    <!-- Header -->
+    <div>
+        <h1 class="text-3xl font-bold text-white">Dashboard</h1>
+        <p class="text-gray-400 mt-1">System Overview & Recent Activity</p>
+    </div>
+
+    <!-- Stats Grid -->
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <!-- Stat Card 1 -->
+        <div class="bg-dark-800 border border-dark-700 rounded-xl p-6 shadow-lg">
+            <div class="flex items-center justify-between">
+                <div>
+                    <p class="text-sm font-medium text-gray-400">Total Emails Processed</p>
+                    <p class="text-3xl font-bold text-white mt-2">{{ total_emails }}</p>
+                </div>
+                <div class="p-3 bg-accent-500/10 rounded-lg">
+                    <svg class="w-6 h-6 text-accent-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z">
+                        </path>
+                    </svg>
+                </div>
+            </div>
+        </div>
+
+        <!-- Stat Card 2 -->
+        <div class="bg-dark-800 border border-dark-700 rounded-xl p-6 shadow-lg">
+            <div class="flex items-center justify-between">
+                <div>
+                    <p class="text-sm font-medium text-gray-400">Total Batches</p>
+                    <p class="text-3xl font-bold text-white mt-2">{{ total_batches }}</p>
+                </div>
+                <div class="p-3 bg-green-500/10 rounded-lg">
+                    <svg class="w-6 h-6 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z">
+                        </path>
+                    </svg>
+                </div>
+            </div>
+        </div>
+
+        <!-- SMTP Status Card -->
+        <div class="bg-dark-800 border border-dark-700 rounded-xl p-6 shadow-lg col-span-1 md:col-span-2">
+            <div class="flex items-center justify-between mb-4">
+                <h3 class="text-sm font-medium text-gray-400">Active SMTP Senders</h3>
+                <span class="px-2 py-1 bg-green-500/10 text-green-500 text-xs rounded-full">{{ smtp_senders|length }}
+                    Active</span>
+            </div>
+            <div class="space-y-2 max-h-24 overflow-y-auto pr-2 custom-scrollbar">
+                {% for sender in smtp_senders %}
+                <div class="flex items-center text-sm text-gray-300">
+                    <div class="w-2 h-2 bg-green-500 rounded-full mr-2"></div>
+                    {{ sender }}
+                </div>
+                {% empty %}
+                <p class="text-gray-500 text-sm">No SMTP senders configured.</p>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Recent Batches -->
+    <div class="bg-dark-800 border border-dark-700 rounded-xl shadow-lg overflow-hidden">
+        <div class="px-6 py-4 border-b border-dark-700 flex justify-between items-center">
+            <h2 class="text-lg font-semibold text-white">Recent Batches</h2>
+            <a href="{% url 'batch_list' %}" class="text-sm text-accent-500 hover:text-accent-400">View All</a>
+        </div>
+        <div class="overflow-x-auto">
+            <table class="w-full text-left">
+                <thead>
+                    <tr class="bg-dark-900/50 text-gray-400 text-sm">
+                        <th class="px-6 py-3 font-medium">ID</th>
+                        <th class="px-6 py-3 font-medium">Date</th>
+                        <th class="px-6 py-3 font-medium">Status</th>
+                        <th class="px-6 py-3 font-medium">Progress</th>
+                        <th class="px-6 py-3 font-medium text-right">Actions</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-dark-700">
+                    {% for batch in recent_batches %}
+                    <tr class="hover:bg-dark-700/50 transition-colors">
+                        <td class="px-6 py-4 text-white">#{{ batch.id }}</td>
+                        <td class="px-6 py-4 text-gray-400 text-sm">{{ batch.created_at|date:"M d, Y H:i" }}</td>
+                        <td class="px-6 py-4">
+                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium 
+                                {% if batch.status == 'COMPLETED' %}bg-green-500/10 text-green-500
+                                {% elif batch.status == 'PROCESSING' %}bg-blue-500/10 text-blue-500
+                                {% elif batch.status == 'FAILED' %}bg-red-500/10 text-red-500
+                                {% else %}bg-gray-500/10 text-gray-400{% endif %}">
+                                {{ batch.status }}
+                            </span>
+                        </td>
+                        <td class="px-6 py-4 text-gray-400 text-sm">
+                            {{ batch.processed_emails }} / {{ batch.total_emails }}
+                        </td>
+                        <td class="px-6 py-4 text-right">
+                            <a href="{% url 'batch_detail' batch.id %}"
+                                class="text-white hover:text-accent-500 font-medium text-sm">View</a>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="5" class="px-6 py-8 text-center text-gray-500">No batches yet.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

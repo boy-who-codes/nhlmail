@@ -1,0 +1,309 @@
+# Software Requirements Specification (SRS)
+
+## Project Name
+
+**MEIP – Meta‑Insyt Email Intelligence Platform**
+
+## Version
+
+v1.0 (Internal Enterprise Tool)
+
+## Purpose
+
+MEIP is an **internal, enterprise‑grade email validation and lead intelligence system** built for Meta‑Insyt. Its purpose is to **maximize deliverability, reduce bounce rates, and prevent good leads from being incorrectly discarded** by using layered, explainable, and tunable validation logic.
+
+This system is **not a public SaaS** and will be used only by authorized Meta‑Insyt personnel.
+
+---
+
+## Goals & Non‑Goals
+
+### Goals
+
+* Achieve **~9/10 practical accuracy** (not theoretical perfection)
+* Avoid false negatives (good emails marked bad)
+* Provide **clear reasons** for every decision
+* Handle **large volumes (up to 1M emails)** via async processing
+* Enable **manual + CSV validation**
+* Separate leads by confidence tiers
+* Export clean, actionable results
+
+### Non‑Goals
+
+* Not claiming 100% SMTP‑level certainty (impossible)
+* No paid APIs required
+* No public access / no external exposure
+
+---
+
+## User Roles
+
+### 1. Admin
+
+* Manage SMTP sender pool
+* Manage disposable domain list
+* Configure thresholds (RTPC scores)
+* View system analytics
+
+### 2. Operator (Default User)
+
+* Upload CSV files
+* Manually test emails
+* View results
+* Export filtered leads
+
+---
+
+## System Architecture
+
+### Backend
+
+* **Django 5.x**
+* Django REST Framework (internal APIs)
+* PostgreSQL (recommended)
+* Redis + Celery (async jobs)
+
+### Frontend
+
+* Django Templates or React (optional)
+* **Uber‑dark / modern dark UI**
+* TailwindCSS or ShadCN‑style components
+
+### Execution Modes
+
+* Sync (manual check)
+* Async batch processing (CSV / bulk)
+
+---
+
+## Core Features
+
+## 1. Email Input Methods
+
+### 1.1 Manual Entry Screen
+
+* Textarea (comma / newline separated emails)
+* Real‑time validation feedback
+* Single‑email deep inspection
+
+### 1.2 CSV Upload Screen
+
+* Required column: `Email`
+* Optional columns preserved
+* File size support: large (streaming upload)
+
+---
+
+## 2. Layered Validation Engine (Critical)
+
+### Validation Layers (in order)
+
+1. **Syntax Validation**
+
+   * RFC‑compliant syntax check
+   * Unicode normalization
+
+2. **Domain Resolution**
+
+   * MX record lookup
+   * A record fallback
+
+3. **Disposable Domain Detection**
+
+   * Internal maintained list (editable via UI)
+   * Zero tolerance (hard fail)
+
+4. **Role‑Based Address Detection**
+
+   * admin, support, sales, info, contact, help, customercare, etc.
+   * Soft penalty (never hard fail alone)
+
+5. **Domain Age Intelligence**
+
+   * WHOIS lookup
+   * Age recorded but **not a hard blocker**
+   * Used only in scoring
+
+6. **Provider Detection**
+
+   * Google Workspace
+   * Microsoft 365
+   * Zoho
+   * Custom MX
+
+7. **Catch‑All Heuristic**
+
+   * Based on provider + MX behavior
+   * Flagged as "Possible" only
+
+8. **DMARC / SPF Presence**
+
+   * Detects enterprise domains
+   * Used for confidence boosting
+
+9. **SMTP Micro‑Check (RTPC‑style)**
+
+   * HELO + MAIL FROM + RCPT TO
+   * No DATA sent
+   * Uses internal SMTP sender pool
+   * Timeout‑safe
+
+10. **Bounce History (Optional)**
+
+    * Previous failed emails penalized
+    * Never hard‑blocked alone
+
+---
+
+## 3. RTPC Scoring System
+
+### RTPC = Real‑Time Probabilistic Confidence
+
+Score Range: **0 – 100**
+
+| Condition         | Effect |
+| ----------------- | ------ |
+| Valid SMTP        | +      |
+| Disposable        | −50    |
+| Role‑Based        | −30    |
+| SMTP Fail         | −50    |
+| Bounce History    | −40    |
+| DMARC/SPF Present | +10    |
+
+### Confidence Buckets
+
+| RTPC Score | Status          | Action              |
+| ---------- | --------------- | ------------------- |
+| 81–100     | Deliverable     | SEND                |
+| 51–80      | Risky           | Verify / test batch |
+| 0–50       | Not Deliverable | DO NOT SEND         |
+
+*(Admin can tune thresholds)*
+
+---
+
+## 4. Result Classification
+
+Leads are separated into:
+
+* Deliverable
+* Risky (small test batch recommended)
+* Not Deliverable
+
+Each email **must include reasons** — no black‑box decisions.
+
+---
+
+## 5. Dashboard Screens
+
+### 5.1 Upload Screen
+
+* CSV upload
+* Progress bar (async jobs)
+
+### 5.2 Manual Checker Screen
+
+* Single email deep diagnostics
+* Full reason breakdown
+
+### 5.3 Results Dashboard
+
+* Filters by status
+* Search
+* Provider breakdown
+* RTPC histogram
+
+### 5.4 Export Screen
+
+* Export All
+* Export Deliverable Only
+* Export Risky Only
+
+Formats:
+
+* CSV
+* XLSX
+
+---
+
+## 6. CSV Format (Output)
+
+### Mandatory Columns
+
+* Email
+* Status
+* RTPC Score
+* Recommendation
+
+### Diagnostic Columns
+
+* Syntax Valid
+* Domain Valid
+* Disposable
+* Role‑Based
+* Catch‑All Likely
+* Domain Age (Days)
+* Provider
+* SMTP Micro‑Check
+* DMARC/SPF Present
+* Bounce History Flag
+* Reason
+
+---
+
+## 7. Performance Requirements
+
+* Multithreaded + async execution
+* Celery workers for large batches
+* Cache DNS / WHOIS results
+* Cap SMTP checks per domain
+
+Target:
+
+* 1M emails batch (chunked)
+* No blocking UI
+
+---
+
+## 8. Security & Access Control
+
+* Login required
+* Role‑based access
+* No public endpoints
+* Optional IP allowlist / Warp access
+
+---
+
+## 9. Deployment
+
+### Local / Internal
+
+* Dockerized Django app
+* Redis + PostgreSQL
+
+### Optional
+
+* Warp‑protected access
+* Internal VPN
+
+---
+
+## 10. Future Enhancements (Optional)
+
+* Campaign warm‑up analytics
+* ISP reputation hints
+* Lead scoring integration
+* CRM sync
+* Adaptive scoring via feedback loop
+
+---
+
+## Final Note (Important)
+
+This system is **not trying to be perfect** — it is trying to be **trustworthy, explainable, and safe for revenue**.
+
+MEIP prioritizes:
+
+> “Never kill a good lead blindly.”
+
+That is what makes it better than generic SaaS validators.

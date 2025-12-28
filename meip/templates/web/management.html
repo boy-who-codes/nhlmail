@@ -1,0 +1,109 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="space-y-6" x-data="{ tab: 'smtp' }">
+    <div class="flex justify-between items-center">
+        <h1 class="text-3xl font-bold text-white">System Settings</h1>
+
+        <!-- Tabs -->
+        <div class="flex space-x-1 bg-dark-800 p-1 rounded-lg">
+            <button @click="tab = 'smtp'"
+                :class="tab === 'smtp' ? 'bg-accent-600 text-white' : 'text-gray-400 hover:text-white'"
+                class="px-4 py-2 rounded-md text-sm font-medium transition-colors">SMTP Senders</button>
+            <button @click="tab = 'disposable'"
+                :class="tab === 'disposable' ? 'bg-accent-600 text-white' : 'text-gray-400 hover:text-white'"
+                class="px-4 py-2 rounded-md text-sm font-medium transition-colors">Disposable Domains</button>
+            <button @click="tab = 'proxy'"
+                :class="tab === 'proxy' ? 'bg-accent-600 text-white' : 'text-gray-400 hover:text-white'"
+                class="px-4 py-2 rounded-md text-sm font-medium transition-colors">Proxy Config</button>
+        </div>
+    </div>
+
+    <!-- SMTP Tab -->
+    <div x-show="tab === 'smtp'" class="space-y-4">
+        <div class="bg-dark-800 border border-dark-700 rounded-xl p-6 shadow-lg">
+            <h2 class="text-xl font-semibold text-white mb-4">Manage SMTP Senders</h2>
+            <form method="POST" class="flex gap-4 mb-6">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="add_smtp">
+                <input type="email" name="email" placeholder="sender@example.com" required
+                    class="flex-1 bg-dark-900 border border-dark-600 text-white rounded-md px-4 py-2 focus:ring-2 focus:ring-accent-500 focus:border-transparent">
+                <button type="submit"
+                    class="bg-accent-600 hover:bg-accent-500 text-white px-6 py-2 rounded-md font-medium transition-colors">Add</button>
+            </form>
+
+            <div class="space-y-2">
+                {% for sender in smtp_senders %}
+                <div class="flex justify-between items-center bg-dark-900/50 p-3 rounded-md">
+                    <span class="text-gray-300">{{ sender.email }}</span>
+                    <form method="POST" class="inline">
+                        {% csrf_token %}
+                        <input type="hidden" name="action" value="delete_smtp">
+                        <input type="hidden" name="id" value="{{ sender.id }}">
+                        <button type="submit" class="text-red-500 hover:text-red-400 text-sm">Remove</button>
+                    </form>
+                </div>
+                {% empty %}
+                <p class="text-gray-500 text-sm">No custom SMTP senders added. Using system default.</p>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Disposable Tab -->
+    <div x-show="tab === 'disposable'" class="space-y-4" style="display: none;">
+        <div class="bg-dark-800 border border-dark-700 rounded-xl p-6 shadow-lg">
+            <h2 class="text-xl font-semibold text-white mb-4">Manage Disposable Domains</h2>
+            <form method="POST" class="flex gap-4 mb-6">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="add_disposable">
+                <input type="text" name="domain" placeholder="bad-domain.com" required
+                    class="flex-1 bg-dark-900 border border-dark-600 text-white rounded-md px-4 py-2 focus:ring-2 focus:ring-accent-500 focus:border-transparent">
+                <button type="submit"
+                    class="bg-red-600 hover:bg-red-500 text-white px-6 py-2 rounded-md font-medium transition-colors">Block</button>
+            </form>
+
+            <div class="max-h-96 overflow-y-auto space-y-2 custom-scrollbar">
+                {% for domain in disposable_domains %}
+                <div class="flex justify-between items-center bg-dark-900/50 p-3 rounded-md">
+                    <span class="text-gray-300">{{ domain.domain }}</span>
+                    <form method="POST" class="inline">
+                        {% csrf_token %}
+                        <input type="hidden" name="action" value="delete_disposable">
+                        <input type="hidden" name="id" value="{{ domain.id }}">
+                        <button type="submit" class="text-red-500 hover:text-red-400 text-sm">Remove</button>
+                    </form>
+                </div>
+                {% empty %}
+                <p class="text-gray-500 text-sm">No custom disposable domains added.</p>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Proxy Tab -->
+    <div x-show="tab === 'proxy'" class="space-y-4" style="display: none;">
+        <div class="bg-dark-800 border border-dark-700 rounded-xl p-6 shadow-lg">
+            <h2 class="text-xl font-semibold text-white mb-4">Proxy Configuration</h2>
+            <p class="text-gray-400 text-sm mb-6">Configure a proxy for outgoing validation requests to avoid IP
+                blacklisting.</p>
+
+            <form method="POST" class="space-y-4">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="update_proxy">
+                <div>
+                    <label class="block text-sm font-medium text-gray-400 mb-1">Proxy URL</label>
+                    <input type="text" name="proxy_url" value="{{ proxy_url }}" placeholder="http://user:pass@host:port"
+                        class="w-full bg-dark-900 border border-dark-600 text-white rounded-md px-4 py-2 focus:ring-2 focus:ring-accent-500 focus:border-transparent">
+                </div>
+                <button type="submit"
+                    class="bg-accent-600 hover:bg-accent-500 text-white px-6 py-2 rounded-md font-medium transition-colors">Save
+                    Configuration</button>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Alpine.js for Tabs -->
+<script src="//unpkg.com/alpinejs" defer></script>
+{% endblock %}

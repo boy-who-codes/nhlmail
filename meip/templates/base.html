@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MEIP - Meta-Insyt Email Intelligence Platform</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        dark: {
+                            900: '#0a0a0a',
+                            800: '#171717',
+                            700: '#262626',
+                        },
+                        accent: {
+                            500: '#3b82f6', // Premium Blue
+                            600: '#2563eb',
+                        }
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+    </style>
+</head>
+
+<body class="bg-dark-900 text-gray-200 antialiased min-h-screen flex flex-col">
+    <nav class="border-b border-dark-700 bg-dark-800/50 backdrop-blur-md sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex items-center justify-between h-16">
+                <div class="flex items-center">
+                    <span class="text-xl font-bold tracking-tight text-white">MEIP</span>
+                    <div class="ml-10 flex items-baseline space-x-4">
+                        <a href="{% url 'dashboard' %}"
+                            class="px-3 py-2 rounded-md text-sm font-medium hover:bg-dark-700 hover:text-white transition-colors">Dashboard</a>
+                        <a href="{% url 'manual_validate' %}"
+                            class="px-3 py-2 rounded-md text-sm font-medium hover:bg-dark-700 hover:text-white transition-colors">Manual
+                            Check</a>
+                        <a href="{% url 'batch_list' %}"
+                            class="px-3 py-2 rounded-md text-sm font-medium hover:bg-dark-700 hover:text-white transition-colors">History</a>
+                        <a href="{% url 'management' %}"
+                            class="px-3 py-2 rounded-md text-sm font-medium hover:bg-dark-700 hover:text-white transition-colors">Settings</a>
+                    </div>
+                </div>
+                <div>
+                    <!-- System Health Indicator -->
+                    <div class="relative group">
+                        <button id="health-btn"
+                            class="flex items-center space-x-2 text-gray-300 hover:text-white px-3 py-2 rounded-md transition-colors text-sm font-medium">
+                            <span class="w-2 h-2 rounded-full bg-green-500" id="health-status-dot"></span>
+                            <span>System Health</span>
+                            <span id="active-process-badge"
+                                class="hidden bg-accent-600 text-white text-xs font-bold px-1.5 py-0.5 rounded-full">0</span>
+                        </button>
+
+                        <!-- Health Popup -->
+                        <div id="health-popup"
+                            class="hidden absolute right-0 mt-2 w-64 bg-dark-800 border border-dark-700 rounded-xl shadow-2xl p-4 z-50">
+                            <h4 class="text-white font-semibold mb-3 border-b border-dark-700 pb-2">System Status</h4>
+                            <div class="space-y-3 text-sm">
+                                <div class="flex justify-between items-center">
+                                    <span class="text-gray-400">Status</span>
+                                    <span id="sys-status-text" class="text-green-400">Healthy</span>
+                                </div>
+                                <div class="flex justify-between items-center">
+                                    <span class="text-gray-400">Redis</span>
+                                    <span id="redis-status-text" class="text-green-500">Connected</span>
+                                </div>
+                                <div class="flex justify-between items-center">
+                                    <span class="text-gray-400">Active Workers</span>
+                                    <span id="worker-count-text"
+                                        class="text-white font-mono bg-dark-700 px-2 rounded">0</span>
+                                </div>
+                                <div class="text-xs text-gray-500 pt-2 border-t border-dark-700">
+                                    Mode: Multi-Threaded (x4)
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <script>
+                        const healthBtn = document.getElementById('health-btn');
+                        const healthPopup = document.getElementById('health-popup');
+
+                        // Toggle Popup
+                        healthBtn.addEventListener('click', () => {
+                            healthPopup.classList.toggle('hidden');
+                        });
+
+                        // Close on click outside
+                        document.addEventListener('click', (e) => {
+                            if (!healthBtn.contains(e.target) && !healthPopup.contains(e.target)) {
+                                healthPopup.classList.add('hidden');
+                            }
+                        });
+
+                        // Poll Health API
+                        function updateHealth() {
+                            fetch('/api/system-health/')
+                                .then(r => r.json())
+                                .then(data => {
+                                    // Update Badge
+                                    const badge = document.getElementById('active-process-badge');
+                                    if (data.active_processes > 0) {
+                                        badge.innerText = data.active_processes;
+                                        badge.classList.remove('hidden');
+                                        badge.classList.add('animate-pulse');
+                                    } else {
+                                        badge.classList.add('hidden');
+                                        badge.classList.remove('animate-pulse');
+                                    }
+
+                                    // Update Status Dot/Text
+                                    const dot = document.getElementById('health-status-dot');
+                                    const sysStatus = document.getElementById('sys-status-text');
+
+                                    if (!data.redis_connected) {
+                                        dot.className = "w-2 h-2 rounded-full bg-red-500 animate-ping";
+                                        sysStatus.innerText = "Critical Error";
+                                        sysStatus.className = "text-red-500 font-bold";
+                                    } else if (data.active_processes > 0) {
+                                        dot.className = "w-2 h-2 rounded-full bg-accent-500 animate-pulse";
+                                        sysStatus.innerText = "Processing";
+                                        sysStatus.className = "text-accent-400";
+                                    } else {
+                                        dot.className = "w-2 h-2 rounded-full bg-green-500";
+                                        sysStatus.innerText = "Healthy";
+                                        sysStatus.className = "text-green-400";
+                                    }
+
+                                    // Update Details
+                                    document.getElementById('redis-status-text').innerText = data.redis_connected ? "Connected" : "Disconnected";
+                                    document.getElementById('redis-status-text').className = data.redis_connected ? "text-green-500" : "text-red-500 font-bold";
+                                    document.getElementById('worker-count-text').innerText = data.active_processes;
+                                })
+                                .catch(e => console.error("Health poll failed", e));
+                        }
+
+                        // Poll every 5s
+                        setInterval(updateHealth, 5000);
+                        updateHealth(); // Init
+                    </script>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <main class="flex-grow max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {% block content %}{% endblock %}
+    </main>
+
+    <footer class="bg-dark-900 border-t border-dark-700 py-6 mt-12">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+            <p class="text-gray-500 text-sm">NHL Internal Mail Validator &copy; {% now "Y" %}</p>
+        </div>
+    </footer>
+</body>
+
+</html>

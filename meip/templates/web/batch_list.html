@@ -1,0 +1,123 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="space-y-8">
+    <div class="flex justify-between items-center">
+        <div>
+            <h1 class="text-3xl font-bold text-white">Batch History</h1>
+            <p class="text-gray-400 mt-1">All processed CSV uploads.</p>
+        </div>
+        <a href="{% url 'upload_batch' %}"
+            class="px-4 py-2 bg-accent-600 text-white text-sm font-medium rounded-md hover:bg-accent-700 transition-colors">
+            New Batch
+        </a>
+    </div>
+
+    <form method="POST" action="{% url 'batch_bulk_action' %}" id="bulkForm">
+        {% csrf_token %}
+
+        <div class="flex justify-between items-center bg-dark-800 p-4 rounded-t-xl border border-dark-700 border-b-0">
+            <div class="flex space-x-2 items-center">
+                <select name="action"
+                    class="bg-dark-700 text-gray-300 text-sm rounded-md border-dark-600 focus:ring-accent-500 focus:border-accent-500 px-3 py-2">
+                    <option value="" disabled selected>-- Select Action --</option>
+                    <option value="resume">Resume Selected</option>
+                    <option value="pause">Pause Selected</option>
+                    <option value="delete">Delete Selected</option>
+                </select>
+                <button type="submit"
+                    class="px-4 py-2 bg-dark-600 text-white text-sm font-medium rounded-md hover:bg-dark-500 transition-colors">
+                    Apply
+                </button>
+            </div>
+            <div class="text-gray-400 text-sm">
+                <span id="selected-count">0</span> batches selected
+            </div>
+        </div>
+
+        <div class="bg-dark-800 border border-dark-700 rounded-b-xl shadow-lg overflow-hidden mb-8">
+            <div class="overflow-x-auto">
+                <table class="w-full text-left">
+                    <thead>
+                        <tr class="bg-dark-900/50 text-gray-400 text-sm">
+                            <th class="px-6 py-3 font-medium w-10">
+                                <input type="checkbox" id="selectAll"
+                                    class="rounded bg-dark-700 border-dark-600 text-accent-500 focus:ring-0 cursor-pointer">
+                            </th>
+                            <th class="px-6 py-3 font-medium">ID</th>
+                            <th class="px-6 py-3 font-medium">Date</th>
+                            <th class="px-6 py-3 font-medium">File</th>
+                            <th class="px-6 py-3 font-medium">Status</th>
+                            <th class="px-6 py-3 font-medium">Progress</th>
+                            <th class="px-6 py-3 font-medium text-right">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-dark-700">
+                        {% for batch in batches %}
+                        <tr class="hover:bg-dark-700/50 transition-colors">
+                            <td class="px-6 py-4">
+                                <input type="checkbox" name="batch_ids" value="{{ batch.id }}"
+                                    class="batch-checkbox rounded bg-dark-700 border-dark-600 text-accent-500 focus:ring-0 cursor-pointer">
+                            </td>
+                            <td class="px-6 py-4 text-white">#{{ batch.id }}</td>
+                            <td class="px-6 py-4 text-gray-400 text-sm">{{ batch.created_at|date:"M d, Y H:i" }}</td>
+                            <td class="px-6 py-4 text-gray-300 text-sm truncate max-w-xs"
+                                title="{{ batch.csv_file.name }}">{{ batch.csv_file.name }}</td>
+                            <td class="px-6 py-4">
+                                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium 
+                                    {% if batch.status == 'COMPLETED' %}bg-green-500/10 text-green-500
+                                    {% elif batch.status == 'PROCESSING' %}bg-blue-500/10 text-blue-500
+                                    {% elif batch.status == 'FAILED' %}bg-red-500/10 text-red-500
+                                    {% elif batch.status == 'PAUSED' %}bg-yellow-500/10 text-yellow-500
+                                    {% else %}bg-gray-500/10 text-gray-400{% endif %}">
+                                    {% if batch.status == 'PROCESSING' %}
+                                    <svg class="animate-spin -ml-1 mr-1.5 h-3 w-3 text-blue-500"
+                                        xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor"
+                                            stroke-width="4"></circle>
+                                        <path class="opacity-75" fill="currentColor"
+                                            d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z">
+                                        </path>
+                                    </svg>
+                                    {% endif %}
+                                    {{ batch.status }}
+                                </span>
+                            </td>
+                            <td class="px-6 py-4 text-gray-400 text-sm">
+                                {{ batch.processed_emails }} / {{ batch.total_emails }}
+                            </td>
+                            <td class="px-6 py-4 text-right">
+                                <a href="{% url 'batch_detail' batch.id %}"
+                                    class="text-white hover:text-accent-500 font-medium text-sm">View</a>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </form>
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        const selectAll = document.getElementById('selectAll');
+        const checkboxes = document.querySelectorAll('.batch-checkbox');
+        const countSpan = document.getElementById('selected-count');
+
+        function updateCount() {
+            const checked = document.querySelectorAll('.batch-checkbox:checked').length;
+            countSpan.innerText = checked;
+        }
+
+        selectAll.addEventListener('change', function () {
+            checkboxes.forEach(cb => cb.checked = selectAll.checked);
+            updateCount();
+        });
+
+        checkboxes.forEach(cb => {
+            cb.addEventListener('change', updateCount);
+        });
+    });
+</script>
+{% endblock %}
