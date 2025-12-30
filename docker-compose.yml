@@ -1,0 +1,43 @@
+version: '3.8'
+
+services:
+  web:
+    build: .
+    container_name: meip_web
+    command: python meip/manage.py runserver 0.0.0.0:8000
+    volumes:
+      - .:/app
+    ports:
+      - "8000:8000"
+    depends_on:
+      - redis
+    environment:
+      - DEBUG=True
+      - SECRET_KEY=django-insecure-docker-key
+      - ALLOWED_HOSTS=*
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      # Ensure database is accessible. SQLite in a volume might have locking issues on some FS, 
+      # but for "local dev" it is usually fine.
+      
+  redis:
+    image: redis:7-alpine
+    container_name: meip_redis
+    ports:
+      - "6379:6379"
+
+  celery:
+    build: .
+    container_name: meip_celery
+    command: celery -A meip worker -l info
+    volumes:
+      - .:/app
+    working_dir: /app/meip
+    depends_on:
+      - redis
+      - web
+    environment:
+      - DEBUG=True
+      - SECRET_KEY=django-insecure-docker-key
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0

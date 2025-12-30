@@ -125,277 +125,286 @@ SMTP_LIST = [
 print(f"Loaded {len(DISPOSABLE_DOMAINS)} disposable domains")
 print(f"Loaded {len(SMTP_LIST)} SMTP sender addresses")
 
-# ================== IMPORTS ==================
+# ==========================
+# ENTERPRISE EMAIL VERIFIER v2
+# Catch-All + Firewall Aware
+# ==========================
+
 import pandas as pd
 import dns.resolver
 import whois
 import tldextract
-from email_validator import validate_email, EmailNotValidError
+import random
+import smtplib
+import socket
+import string
+import threading
+from email_validator import validate_email
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from functools import lru_cache
 from datetime import datetime
 from tqdm import tqdm
 from google.colab import files
 import io
-import threading
-import random
-import asyncio
-import aiodns
-import socket
 
-# ================== CONFIG ==================
-MAX_THREADS = 20
+# ================= CONFIG =================
+MAX_THREADS = 15
+SMTP_TIMEOUT = 10
+
+# ----- Feature toggles -----
+ENABLE_FIREWALL_DETECTION = True  # Set to False to skip firewall detection
+ENABLE_DKIM_SPF_CHECK = True      # Set to False to skip DMARC/SPF/DKIM checks
+
+ROLE_PREFIXES = {
+    "admin","info","support","sales","contact","help","customercare","no-reply"
+}
+
+FIREWALL_KEYWORDS = {
+    "proofpoint","barracuda","mimecast","cisco","forcepoint","sophos","trendmicro"
+}
+
 MIN_DOMAIN_AGE_INVALID = 7
 MIN_DOMAIN_AGE_RISKY = 30
-MERGE_RISKY_AS_INVALID = True  # treat medium-risk as invalid
-ROLE_PREFIXES = {"admin","info","support","sales","contact","help","customercare","no-reply"}
-# DISPOSABLE_FILE = "disposable_domains.txt"
-# SMTP_LIST is already in memory from Cell 1
-print(f"Using {len(SMTP_LIST)} SMTP senders from memory")
 
-BOUNCE_HISTORY_FILE = None  # optional CSV file
-
-# ================== THREAD LOCK ==================
 print_lock = threading.Lock()
-def log_status(msg):
-    with print_lock:
-        print(msg)
 
-# ================== LOAD DISPOSABLE DOMAINS ==================
-# Already loaded from Cell 1
-print(f"Using {len(DISPOSABLE_DOMAINS)} disposable domains from memory")
-
-
-# ================== LOAD BOUNCE HISTORY (OPTIONAL) ==================
-BOUNCE_HISTORY = set()
-print("Optional: Upload previous bounce history CSV with 'Email' column or skip")
-uploaded_bounce = files.upload()
-if uploaded_bounce:
-    f = list(uploaded_bounce.keys())[0]
-    df_bounce = pd.read_csv(io.BytesIO(uploaded_bounce[f]))
-    if 'Email' in df_bounce.columns:
-        BOUNCE_HISTORY = set(df_bounce['Email'].str.lower().dropna())
-        print(f"Loaded {len(BOUNCE_HISTORY)} bounce history emails")
-
-# ================== CACHED HELPERS ==================
+# ================= HELPERS =================
 @lru_cache(maxsize=10000)
 def base_domain(email):
     ext = tldextract.extract(email.split("@")[1])
     return f"{ext.domain}.{ext.suffix}"
 
-@lru_cache(maxsize=10000)
-def has_mail_server(domain):
+@lru_cache(maxsize=5000)
+def resolve_mx(domain):
     try:
-        dns.resolver.resolve(domain, "MX")
-        return True
+        return [str(r.exchange).lower() for r in dns.resolver.resolve(domain, "MX")]
     except:
-        try:
-            dns.resolver.resolve(domain, "A")
-            return True
-        except:
-            return False
+        return []
+
+def detect_firewall(mx_hosts):
+    for mx in mx_hosts:
+        for fw in FIREWALL_KEYWORDS:
+            if fw in mx:
+                return True, fw
+    return False, None
 
 @lru_cache(maxsize=5000)
 def domain_age(domain):
     try:
         w = whois.whois(domain)
         c = w.creation_date
-        if isinstance(c, list): c = c[0]
-        if not c: return None
+        if isinstance(c, list):
+            c = c[0]
+        if not c:
+            return None
         return (datetime.utcnow() - c).days
     except:
         return None
 
-@lru_cache(maxsize=5000)
-def provider(domain):
+def random_local():
+    return ''.join(random.choices(string.ascii_lowercase, k=12))
+
+def smtp_rcpt_check(mx, sender, rcpt):
     try:
-        mx = str(dns.resolver.resolve(domain, "MX")[0].exchange).lower()
-        if "google" in mx: return "Google Workspace"
-        if "outlook" in mx or "microsoft" in mx: return "Microsoft 365"
-        if "zoho" in mx: return "Zoho"
-        return "Custom"
-    except:
-        return "Unknown"
-
-def is_disposable(email):
-    return base_domain(email).lower() in DISPOSABLE_DOMAINS
-
-def is_role_based(email):
-    return email.split('@')[0].lower() in ROLE_PREFIXES
-
-def has_anti_spam(domain):
-    try:
-        dmarc_records = dns.resolver.resolve(f"_dmarc.{domain}", "TXT")
-        spf_records = dns.resolver.resolve(domain, "TXT")
-        dmarc_exists = any("v=DMARC1" in str(r) for r in dmarc_records)
-        spf_exists = any("v=spf1" in str(r) for r in spf_records)
-        return dmarc_exists or spf_exists
-    except:
-        return False
-
-def check_smtp(email, smtp_sender):
-    """Micro SMTP check using internal SMTP sender"""
-    try:
-        domain = email.split("@")[1]
-        mx_records = dns.resolver.resolve(domain, 'MX')
-        mx_host = str(mx_records[0].exchange)
-        server = None
-        import smtplib
-        server = smtplib.SMTP(timeout=10)
-        server.connect(mx_host)
+        server = smtplib.SMTP(timeout=SMTP_TIMEOUT)
+        server.connect(mx)
         server.helo()
-        server.mail(smtp_sender)
-        code, _ = server.rcpt(email)
+        server.mail(sender)
+        code, _ = server.rcpt(rcpt)
         server.quit()
-        return code == 250
+        return code
     except:
-        return False
+        return None
 
-def calculate_rtpc_score(email, deliverable, disposable, role_based, anti_spam, bounce_history):
-    score = 100
-    if not deliverable:
-        score -= 50
-    if disposable:
-        score -= 50
-    if role_based:
-        score -= 30
-    if anti_spam:
-        score -= 10
-    if email.lower() in bounce_history:
-        score -= 40
-    return max(0, min(100, score))
+def detect_catch_all(mx, domain, sender):
+    fake1 = f"{random_local()}@{domain}"
+    fake2 = f"{random_local()}@{domain}"
 
-# ================== EMAIL VALIDATION FUNCTION ==================
-def validate_email_address(email):
+    r1 = smtp_rcpt_check(mx, sender, fake1)
+    r2 = smtp_rcpt_check(mx, sender, fake2)
+
+    if r1 == 250 and r2 == 250:
+        return True
+    return False
+
+# ================= MAIN VALIDATION =================
+def validate_email_address(email, smtp_sender):
     out = {
         "Email": email,
-        "Syntax Valid": None,
-        "Domain Valid": None,
-        "Disposable": "No",
-        "Role-Based": "No",
-        "Catch-All Likely": "No",
+        "Syntax": "Invalid",
+        "Domain": "Invalid",
+        "Firewall": "No",
+        "Catch-All": "No",
         "Domain Age (Days)": None,
-        "Provider": None,
-        "SMTP Micro-Check": "Unknown",
-        "DMARC/SPF Present": "No",
-        "Bounce History Flag": "No",
-        "RTPC Score": None,
+        "Spammy": "No",
+        "AsianRegion": "No",
+        "SMTP Trust": "Unknown",
+        "Confidence": 0,
         "Status": None,
-        "Reason": "",
-        "Recommendation": None
+        "Recommendation": None,
+        "Reason": ""
     }
 
+    # Syntax
     try:
-        email_obj = validate_email(email).email
-        out["Email"] = email_obj
-        out["Syntax Valid"] = "Yes"
+        email = validate_email(email).email
+        out["Email"] = email
+        out["Syntax"] = "Valid"
     except:
-        out["Syntax Valid"] = "No"
-        out["Status"] = "NOT DELIVERABLE"
-        out["Reason"] = "Invalid syntax"
+        out["Status"] = "INVALID"
+        out["Reason"] = "Bad syntax"
         out["Recommendation"] = "DO NOT SEND"
         return out
 
-    dom = base_domain(email)
-    out["Domain Valid"] = "Yes" if has_mail_server(dom) else "No"
-    if out["Domain Valid"] == "No":
-        out["Status"] = "NOT DELIVERABLE"
-        out["Reason"] = "No mail server"
+    domain = base_domain(email)
+    mx_hosts = resolve_mx(domain)
+
+    if not mx_hosts:
+        out["Status"] = "INVALID"
+        out["Reason"] = "No MX records"
         out["Recommendation"] = "DO NOT SEND"
         return out
 
-    # Disposable check
-    if is_disposable(email):
-        out["Disposable"] = "Yes"
+    out["Domain"] = "Valid"
 
-    # Role-based check
-    if is_role_based(email):
-        out["Role-Based"] = "Yes"
+    # Firewall detection (optional)
+    if ENABLE_FIREWALL_DETECTION:
+        firewall, fw_name = detect_firewall(mx_hosts)
+        if firewall:
+            out["Firewall"] = f"Yes ({fw_name})"
+    else:
+        firewall, fw_name = False, None
 
     # Domain age
-    age = domain_age(dom)
-    out["Domain Age (Days)"] = age
+    age = domain_age(domain)
+    # Spammy detection (using disposable domains as proxy)
+    is_spammy = domain in DISPOSABLE_DOMAINS
+    out["Spammy"] = "Yes" if is_spammy else "No"
 
-    # Provider
-    prov = provider(dom)
-    out["Provider"] = prov
-    if prov in {"Google Workspace","Microsoft 365","Zoho"}:
-        out["Catch-All Likely"] = "Possible"
+    # Asian region detection via WHOIS country code
+    try:
+        w = whois.whois(domain)
+        country = w.country
+        asian_countries = {"CN", "JP", "KR", "IN", "SG", "TH", "MY", "ID", "PH", "VN", "HK", "TW"}
+        is_asian = country in asian_countries if country else False
+    except Exception:
+        is_asian = False
+    out["AsianRegion"] = "Yes" if is_asian else "No"
 
-    # Anti-spam
-    anti_spam = has_anti_spam(dom)
-    out["DMARC/SPF Present"] = "Yes" if anti_spam else "No"
-
-    # Bounce history
-    if email.lower() in BOUNCE_HISTORY:
-        out["Bounce History Flag"] = "Yes"
-
-    # SMTP micro-check (try with random SMTP sender)
-    smtp_sender = random.choice(SMTP_LIST)
-    deliverable = check_smtp(email, smtp_sender)
-    out["SMTP Micro-Check"] = "Success" if deliverable else "Fail"
-
-    # RTPC score
-    rtpc = calculate_rtpc_score(email, deliverable, out["Disposable"]=="Yes", out["Role-Based"]=="Yes", anti_spam, BOUNCE_HISTORY)
-    out["RTPC Score"] = rtpc
-
-    # Status & recommendation
-    if rtpc >= 81:
-        out["Status"] = "DELIVERABLE"
-        out["Recommendation"] = "SEND"
-        out["Reason"] = "Passed all checks"
-    elif rtpc >= 51:
-        out["Status"] = "RISKY"
-        out["Recommendation"] = "DO NOT SEND"
-        out["Reason"] = "Medium confidence – verify"
-        if MERGE_RISKY_AS_INVALID:
-            out["Status"] = "NOT DELIVERABLE"
+    # DMARC / SPF / DKIM detection (optional)
+    if ENABLE_DKIM_SPF_CHECK:
+        try:
+            dmarc_records = dns.resolver.resolve(f"_dmarc.{domain}", "TXT")
+            out["DMARC Present"] = "Yes"
+        except Exception:
+            out["DMARC Present"] = "No"
+        try:
+            spf_records = dns.resolver.resolve(domain, "TXT")
+            spf_present = any(r.to_text().lower().startswith('v=spf1') for r in spf_records)
+            out["SPF Present"] = "Yes" if spf_present else "No"
+        except Exception:
+            out["SPF Present"] = "No"
     else:
-        out["Status"] = "NOT DELIVERABLE"
+        out["DMARC Present"] = "Skipped"
+        out["SPF Present"] = "Skipped"
+
+    # SMTP RCPT for real email
+    mx = mx_hosts[0]
+    smtp_code = smtp_rcpt_check(mx, smtp_sender, email)
+
+    # Catch-all test
+    is_catch_all = detect_catch_all(mx, domain, smtp_sender)
+    if is_catch_all:
+        out["Catch-All"] = "Yes"
+
+    # Trust logic
+    smtp_trusted = True
+    if firewall:
+        smtp_trusted = False
+    if smtp_code is None:
+        smtp_trusted = False
+
+    out["SMTP Trust"] = "Trusted" if smtp_trusted else "Untrusted"
+
+    # ================= SCORING =================
+    score = 100
+
+    # Domain age penalty removed per user request
+
+    if is_catch_all:
+        score -= 35
+
+    if firewall:
+        score -= 30
+
+    if smtp_code != 250:
+        score -= 50
+
+    score = max(0, min(100, score))
+    out["Confidence"] = score
+
+    # ================= FINAL STATUS =================
+    if score >= 80 and not firewall and not is_catch_all:
+        out["Status"] = "VALID"
+        out["Recommendation"] = "SAFE TO SEND"
+        out["Reason"] = "Mailbox level confidence"
+    elif firewall:
+        out["Status"] = "FIREWALL_PROTECTED"
+        out["Recommendation"] = "SEND SLOW / WARMED IP ONLY"
+        out["Reason"] = "Enterprise firewall hides mailbox status"
+    elif is_catch_all:
+        out["Status"] = "CATCH_ALL"
+        out["Recommendation"] = "SEND ONLY IF NECESSARY"
+        out["Reason"] = "Domain accepts all recipients"
+    elif score >= 50:
+        out["Status"] = "RISKY"
+        out["Recommendation"] = "DO NOT BULK SEND"
+        out["Reason"] = "Medium confidence"
+    else:
+        out["Status"] = "INVALID"
         out["Recommendation"] = "DO NOT SEND"
-        out["Reason"] = "Failed one or more checks"
+        out["Reason"] = "Low confidence"
 
     return out
 
-# ================== CSV / MANUAL PROCESSING ==================
-def process_csv(input_csv):
-    try:
-        df = pd.read_csv(input_csv)
-        if "Email" not in df.columns:
-            raise Exception("CSV must contain 'Email' column")
-        emails = df['Email'].dropna().tolist()
-        results = []
-        with ThreadPoolExecutor(MAX_THREADS) as executor:
-            futures = {executor.submit(validate_email_address, e): e for e in emails}
-            for f in tqdm(as_completed(futures), total=len(futures), desc="Validating Emails"):
-                results.append(f.result())
-        return pd.DataFrame(results)
-    except Exception as e:
-        print(f"Error processing CSV: {e}")
-        return None
+# ================= CSV PROCESS =================
+def process_csv(file_bytes, smtp_sender):
+    df = pd.read_csv(file_bytes)
+    if "Email" not in df.columns:
+        raise Exception("CSV must contain Email column")
 
-# ================== GOOGLE COLAB INTERFACE ==================
-def colab_upload_and_validate():
-    print("Upload CSV file with 'Email' column (or skip for manual entry)")
+    emails = df["Email"].dropna().tolist()
+    results = []
+
+    with ThreadPoolExecutor(MAX_THREADS) as exe:
+        futures = {
+            exe.submit(validate_email_address, e, smtp_sender): e
+            for e in emails
+        }
+        for f in tqdm(as_completed(futures), total=len(futures)):
+            results.append(f.result())
+
+    return pd.DataFrame(results)
+
+# ================= COLAB UI =================
+def run_colab():
+    print("Upload CSV with Email column")
     uploaded = files.upload()
-    emails = []
-    if uploaded:
-        filename = list(uploaded.keys())[0]
-        validated_df = process_csv(io.BytesIO(uploaded[filename]))
-    else:
-        raw_input = input("Enter emails (comma separated): ")
-        emails = [e.strip() for e in raw_input.split(",") if e.strip()]
-        validated_df = pd.DataFrame([validate_email_address(e) for e in tqdm(emails, desc="Manual Emails")])
+    if not uploaded:
+        print("No file uploaded")
+        return
 
-    if validated_df is not None:
-        csv_name = "email_validation_results.csv"
-        xlsx_name = "email_validation_results.xlsx"
-        validated_df.to_csv(csv_name, index=False)
-        validated_df.to_excel(xlsx_name, index=False)
-        print("\nValidation complete. Download files:")
-        files.download(csv_name)
-        files.download(xlsx_name)
+    smtp_sender = input("Enter sender email for SMTP probing: ").strip()
 
-# ================== RUN ==================
+    fname = list(uploaded.keys())[0]
+    df = process_csv(io.BytesIO(uploaded[fname]), smtp_sender)
+
+    df.to_csv("verified_results.csv", index=False)
+    df.to_excel("verified_results.xlsx", index=False)
+
+    files.download("verified_results.csv")
+    files.download("verified_results.xlsx")
+
+# ================= RUN =================
 if __name__ == "__main__":
-    colab_upload_and_validate()
+    run_colab()

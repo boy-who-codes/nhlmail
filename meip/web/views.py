@@ -1,5 +1,6 @@
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
+from django.contrib import messages
 from django.http import JsonResponse, HttpResponse
 from django.db.models import Count, Avg
 from validator.models import ValidationBatch, EmailResult, SMTPSender, DisposableDomain, SystemConfig
@@ -141,12 +142,18 @@ def export_batch_csv(request, batch_id):
     response['Content-Disposition'] = f'attachment; filename="batch_{batch_id}_results.csv"'
     
     writer = csv.writer(response)
-    writer.writerow(['Email', 'Status', 'RTPC Score', 'Recommendation', 'Reason', 'Provider', 'Disposable', 'Role', 'Smtp Check'])
+    writer.writerow(['Email', 'Status', 'RTPC Score', 'Recommendation', 'Reason', 'Provider', 'Disposable', 'Role', 'Smtp Check', 'Firewall Info', 'SPF', 'DMARC', 'Spammy', 'Asian Region', 'Server Message'])
     
     for r in batch.results.all():
         writer.writerow([
             r.email, r.status, r.rtpc_score, r.recommendation, r.reason, 
-            r.provider, r.is_disposable, r.is_role_based, r.smtp_check
+            r.provider, r.is_disposable, r.is_role_based, r.smtp_check,
+            r.firewall_info or '',
+            'Yes' if r.has_spf else 'No',
+            'Yes' if r.has_dmarc else 'No',
+            'Yes' if r.is_spammy else 'No',
+            'Yes' if r.is_asian_region else 'No',
+            r.check_message or ''
         ])
         
     return response

@@ -1,200 +1,110 @@
-# MEIP - Meta-Insyt Email Intelligence Platform
+# Project: NHL Mail Validation
 
-MEIP is an enterprise-grade, privacy-first email validation system designed for high accuracy and detailed intelligence. It moves beyond simple "Valid/Invalid" checks to provide deep insights into email infrastructure, security configurations, and deliverability risks.
+## Overview
 
-## 🚀 Key Features
+This repository contains a Python‑based email validation and verification system used for the **NHL Mail** project.  The core features include:
+- SMTP probing with catch‑all detection
+- DNS checks (MX, SPF, DMARC, DKIM)
+- Firewall / security‑gateway detection (Proofpoint, Barracuda, Mimecast, Cisco ESA)
+- Confidence scoring and risk classification
+- Celery‑based asynchronous batch processing (Windows compatible)
 
-*   **Deep Validation Engine**:
-    *   **Syntax & Format**: RFC-compliant syntax checking and unicode normalization.
-    *   **Domain Intelligence**: Validates MX records, A records, and Domain Age.
-    *   **Infrastructure Checks**: Detects Provider (Google, Outlook, Zoho, etc.), Security (SPF/DMARC), and Catch-All configurations.
-    *   **Risk Analysis**: Flags Disposable domains, Role-based accounts (admin@, support@), and Greylisted servers.
-    *   **SMTP Handshake**: Performs safe, quiet SMTP verifications without sending actual emails.
-*   **Bulk Processing**:
-    *   Asynchronous execution using **Celery & Redis**.
-    *   Handles large CSV uploads without blocking the UI.
-    *   Real-time progress tracking and estimated completion times.
-    *   Pause/Resume/Delete batch controls.
-*   **Monitoring Dashboard**:
-    *   Dark-mode UI for "NOC-style" monitoring.
-    *   Visual separation of Deliverable, Risky, and Undeliverable leads.
-    *   Detailed verification logs (SMTP check messages, error codes).
-*   **Data Export**:
-    *   Export clean, filtered CSVs for marketing campaigns.
+## Repository Structure
 
-## 📂 Directory Structure
-
-```text
-meip/
-├── meip/                   # Project Settings & Configuration
-│   ├── settings.py         # Django Settings (Apps, DB, Redis, Email)
-│   ├── urls.py             # Main Route Mapping
-│   └── celery.py           # Celery App Configuration
-│
-├── validator/              # Core Validation Engine App
-│   ├── engine.py           # The "Brain" - SMTP, DNS, & Scoring Logic
-│   ├── models.py           # DB Models (ValidationBatch, EmailResult)
-│   ├── tasks.py            # Celery Async Tasks definition
-│   └── migrations/         # Database Schema Migrations
-│
-├── web/                    # Dashboard & UI App
-│   ├── views.py            # Frontend Logic (Dashboard, Upload, Reports)
-│   └── urls.py             # Web Routes
-│
-├── templates/              # HTML Templates (Tailwind CSS based)
-│   ├── base.html           # Main Layout
-│   └── web/                # Dashboard Pages (batch_detail.html, etc.)
-│
-├── media/uploads/          # Storage for uploaded CSVs
-├── db.sqlite3              # Local Database
-├── manage.py               # Django CLI Entry Point
-├── run_celery.bat          # Windows Helper Script for Workers
-└── README.md               # This Documentation
+```
+00wrap/
+├─ .env                 # Environment variables
+├─ .platform/          # Platform‑specific configuration (e.g., routes.yaml)
+├─ diagnose_smtp.py    # SMTP diagnostic utilities
+├─ val.py               # Main validation entry point
+├─ meip/                # Django project for the web UI
+│   ├─ manage.py
+│   ├─ web/            # Django app containing URLs, views, templates
+│   └─ ...
+├─ run_celery_windows.bat  # Helper script to start Celery on Windows
+└─ README.md            # This file – project documentation
 ```
 
----
+## Prerequisites
 
-## 🛠️ Prerequisites
+- **Python 3.10+**
+- **pip** (Python package manager)
+- **Git** (optional, for cloning the repo)
+- **Docker** (optional, for containerised development)
+- **Windows, macOS, or Linux** – the project works on all platforms.  Windows users should run the provided batch scripts for Celery.
 
-*   **Python 3.10+**
-*   **Redis Server** (Message Broker for Async Tasks)
+## Installation
 
----
+```bash
+# Clone the repository
+git clone https://github.com/your‑org/nhlmail.git
+cd nhlmail/00wrap
 
-## 💻 Running Locally
-
-### 1. Windows Setup
-
-**A. Install Redis**
-Windows does not support Redis natively. You have two options:
-1.  **WSL2 (Recommended)**: Install Ubuntu on WSL and run `sudo apt install redis && sudo service redis-server start`.
-2.  **Memurai**: Download and install [Memurai](https://www.memurai.com/) (Redis-compatible for Windows).
-3.  **Docker**: `docker run -p 6379:6379 redis`
-
-**B. Setup Environment**
-```powershell
-# Create venv
+# Create a virtual environment (recommended)
 python -m venv venv
-.\venv\Scripts\activate
-
-# Install Dependencies
-pip install django celery redis dnspython tldextract email-validator python-whois
-
-# Database Setup
-python manage.py migrate
-```
-
-**C. Start the System**
-You need **two** separate terminal windows running simultaneously.
-
-*Terminal 1: Web Server*
-```powershell
-python manage.py runserver
-# Access at http://127.0.0.1:8000
-```
-
-*Terminal 2: Background Worker*
-```powershell
-# Use the helper script
-.\run_celery.bat
-
-# OR run manually:
-celery -A meip worker --pool=solo -l info
-# Note: --pool=solo is CRITICAL for Windows to avoid freeze issues
-```
-
-### 2. Linux / macOS Setup
-
-**A. Install Redis**
-*   **Ubuntu/Debian**: `sudo apt install redis-server`
-*   **macOS (Homebrew)**: `brew install redis`
-*   **Start Service**: `sudo service redis-server start` (Linux) or `brew services start redis` (Mac).
-
-**B. Setup Environment**
-```bash
-python3 -m venv venv
+# Activate the environment
+# Linux/macOS
 source venv/bin/activate
-pip install django celery redis dnspython tldextract email-validator python-whois
-python manage.py migrate
+# Windows
+venv\Scripts\activate
+
+# Install dependencies
+pip install -r requirements.txt
 ```
 
-**C. Start the System**
-*Terminal 1: Web Server*
+## Configuration
+
+1. Copy the example environment file and edit the values:
+   ```bash
+   cp .env.example .env
+   ```
+2. Set the following variables in `.env`:
+   - `SMTP_PROBE_TIMEOUT` – timeout in seconds for SMTP probes (default: 10)
+   - `CELERY_BROKER_URL` – e.g., `redis://localhost:6379/0`
+   - `CELERY_RESULT_BACKEND` – e.g., `redis://localhost:6379/1`
+   - `VERIFICATION_IP_POOL` – path to a JSON file containing verification IPs
+
+## Running the Application
+
+### Command‑line validation
+
 ```bash
-python manage.py runserver
+python val.py --email test@example.com
 ```
 
-*Terminal 2: Background Worker*
+### Web UI (Django)
+
 ```bash
-celery -A meip worker -l info
+# Apply migrations
+python meip/manage.py migrate
+
+# Start the development server
+python meip/manage.py runserver
 ```
 
----
+Visit `http://127.0.0.1:8000` in your browser.
 
-## ☁️ Running on Google Colab (For Testing)
+### Celery Workers (Windows)
 
-You can run MEIP in a Colab notebook for quick testing of the logic or even the full UI.
-
-### Option A: Logic Testing (Headless)
-Use this to test the validation engine without the UI.
-
-```python
-# 1. Install Dependencies
-!pip install django dnspython tldextract email-validator python-whois
-
-# 2. Clone Repo (or upload files)
-# If uploading "meip" folder to Colab root:
-import sys
-import os
-import django
-
-# Add project to path
-sys.path.append('/content/meip')
-os.environ.setdefault("DJANGO_SETTINGS_MODULE", "meip.settings")
-django.setup()
-
-# 3. Validation Test
-from validator.engine import validate_email_single
-
-email = "test@example.com"
-result = validate_email_single(email)
-
-import json
-print(json.dumps(result, indent=4, str=str))
+```bash
+run_celery_windows.bat
 ```
 
-### Option B: Full System (with UI)
-Use `pyngrok` to tunnel the Django server to the internet.
+The batch UI will now be able to process large email lists asynchronously.
 
-```python
-# 1. Install System Deps
-!apt-get install -y redis-server
-!service redis-server start
+## Testing
 
-# 2. Install Python Deps
-!pip install django celery redis dnspython tldextract email-validator python-whois pyngrok
-
-# 3. Prepare Project
-# (Upload your 'meip' folder to /content/meip)
-%cd /content/meip
-!python manage.py migrate
-
-# 4. Start Celery (Background)
-import subprocess
-subprocess.Popen(['celery', '-A', 'meip', 'worker', '-l', 'info'])
-
-# 5. Start Django with Ngrok
-from pyngrok import ngrok
-from django.core.management import call_command
-import threading
-
-# Set your Ngrok token first!
-ngrok.set_auth_token("YOUR_NGROK_AUTH_TOKEN")
-
-# Tunnel
-public_url = ngrok.connect(8000).public_url
-print(f"🚀 Application running at: {public_url}")
-
-# Run Server
-!python manage.py runserver 8000
+```bash
+pytest
 ```
+
+## Contributing
+
+1. Fork the repository.
+2. Create a feature branch (`git checkout -b feature/awesome‑feature`).
+3. Write tests for your changes.
+4. Submit a pull request.
+
+## License
+
+This project is licensed under the MIT License – see the `LICENSE` file for details.

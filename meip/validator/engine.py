@@ -9,7 +9,8 @@ from django.conf import settings
 from functools import lru_cache
 import whois
 from .models import DisposableDomain, SMTPSender, SystemConfig
-import socks # Requires pip install pysocks
+import socks
+
 
 # Helper to get disposable domains
 def get_disposable_domains():
@@ -90,16 +91,43 @@ def is_disposable(email):
 def is_role_based(email):
     return email.split('@')[0].lower() in ROLE_PREFIXES
 
-def has_anti_spam(domain):
+def check_dns_security(domain):
+    """Returns (spf_status, dmarc_status) strings"""
+    spf_status = "None"
+    dmarc_status = "None"
+
     try:
+        # DMARC Check
         # Use our configured resolver
         dmarc_records = resolver.resolve(f"_dmarc.{domain}", "TXT")
-        spf_records = resolver.resolve(domain, "TXT")
-        dmarc_exists = any("v=DMARC1" in str(r) for r in dmarc_records)
-        spf_exists = any("v=spf1" in str(r) for r in spf_records)
-        return dmarc_exists or spf_exists
+        for r in dmarc_records:
+            txt = str(r).strip('"')
+            if txt.startswith("v=DMARC1"):
+                # Parse policy
+                if "p=reject" in txt: dmarc_status = "Reject"
+                elif "p=quarantine" in txt: dmarc_status = "Quarantine"
+                elif "p=none" in txt: dmarc_status = "Monitor"
+                else: dmarc_status = "Present"
+                break
     except:
-        return False
+        pass
+        
+    try:
+        # SPF Check
+        spf_records = resolver.resolve(domain, "TXT")
+        for r in spf_records:
+            txt = str(r).strip('"')
+            if txt.startswith("v=spf1"):
+                if "-all" in txt: spf_status = "HardFail"
+                elif "~all" in txt: spf_status = "SoftFail"
+                elif "?all" in txt: spf_status = "Neutral"
+                elif "+all" in txt: spf_status = "AllowAll"
+                else: spf_status = "Present"
+                break
+    except:
+        pass
+        
+    return spf_status, dmarc_status
 
 @lru_cache(maxsize=1000)
 def suggest_domain_typo(domain):
@@ -108,24 +136,54 @@ def suggest_domain_typo(domain):
     matches = difflib.get_close_matches(domain, common, n=1, cutoff=0.85)
     return matches[0] if matches else None
 
+def detect_spam_filter(mx_host, banner=None):
+    mx = mx_host.lower() if mx_host else ""
+    banner = banner.lower() if banner else ""
+    
+    content = f"{mx} {banner}"
+    
+    if "pphosted" in content or "proofpoint" in content: return "Proofpoint"
+    if "mimecast" in content: return "Mimecast"
+    if "barracuda" in content: return "Barracuda"
+    if "outlook" in content or "naming" in content or "microsoft" in content: return "Microsoft EOP"
+    if "google" in content: return "Google Postini"
+    if "messagelabs" in content or "symantec" in content: return "Broadcom/Symantec"
+    if "ironport" in content: return "Cisco IronPort"
+    if "trendmicro" in content: return "TrendMicro"
+    if "sophos" in content: return "Sophos"
+    if "sendgrid" in content: return "SendGrid"
+    return None
+
+def detect_firewall_info(mx_host, banner=None):
+    """Returns detected firewall name for new field"""
+    return detect_spam_filter(mx_host, banner)
+
+
 def check_catch_all(domain):
     """Probes a random non-existent address to see if domain accepts everything."""
     import uuid
     random_user = f"verify_{uuid.uuid4().hex[:8]}@{domain}"
-    success, code, _ = check_smtp_detailed(random_user)
+    success, code, _, _ = check_smtp_detailed(random_user)
     # If a random user is accepted (250), it's a catch-all.
     return success
 
 def check_smtp_detailed(email):
-    """Detailed SMTP check returning (is_success, code, message)"""
+    """Detailed SMTP check returning (is_success, code, message, banner)"""
     try:
-        # Fetch from DB or fallback
-        senders = list(SMTPSender.objects.filter(is_active=True).values_list('email', flat=True))
-        if not senders:
-            smtp_list = getattr(settings, 'SMTP_LIST', ["dev@meta-insyt.com"])
-        else:
-            smtp_list = senders
-            
+        try:
+            # 1. Get senders from DB
+            db_senders = list(SMTPSender.objects.filter(is_active=True).values_list('email', flat=True))
+            if db_senders:
+                smtp_list = db_senders
+            else:
+                # Strictly use settings, no hardcode fallback
+                smtp_list = getattr(settings, 'SMTP_LIST', [])
+                if not smtp_list: raise ValueError("No SMTP Senders available")
+        except Exception:
+             # Fallback if DB fails
+             smtp_list = getattr(settings, 'SMTP_LIST', [])
+             if not smtp_list: raise ValueError("No SMTP Senders available")
+
         smtp_sender = random.choice(smtp_list)
         
         # PROXY Handling (Simplified for brevity, assumes logic matches check_smtp)
@@ -152,7 +210,13 @@ def check_smtp_detailed(email):
                  socket.socket = ORIG_SOCKET
                  
     except:
-         smtp_sender = "dev@meta-insyt.com"
+         # Final safety net if logic above fails
+         smtp_list = getattr(settings, 'SMTP_LIST', [])
+         if smtp_list:
+             smtp_sender = random.choice(smtp_list)
+         else:
+             return False, 999, "Configuration Error: No Senders", ""
+
          if socket.socket != ORIG_SOCKET:
              socket.socket = ORIG_SOCKET
          
@@ -162,21 +226,30 @@ def check_smtp_detailed(email):
         mx_records = sorted(mx_records, key=lambda x: x.preference)
         mx_host = str(mx_records[0].exchange)
         
+        # Determine HELO hostname from sender
+        try:
+             helo_host = smtp_sender.split("@")[1]
+        except:
+             helo_host = socket.getfqdn()
+
         server = smtplib.SMTP(timeout=5)
-        server.connect(mx_host)
-        server.helo()
+        # Capture banner
+        connect_code, connect_msg = server.connect(mx_host)
+        banner = str(connect_msg)
+        
+        server.helo(helo_host)
         server.mail(smtp_sender)
         code, msg = server.rcpt(email)
         server.quit()
-        return code == 250, code, msg
+        return code == 250, code, msg, banner
     except (socket.timeout, socket.error, smtplib.SMTPException, dns.exception.Timeout) as e:
-        return False, 999, str(e)
+        return False, 999, str(e), ""
     except Exception as e:
-        return False, 999, str(e)
+        return False, 999, str(e), ""
 
 # Legacy wrapper for backward compatibility if needed
 def check_smtp(email):
-    s, _, _ = check_smtp_detailed(email)
+    s, _, _, _ = check_smtp_detailed(email)
     return s
 
 def calculate_rtpc_score(email_data):
@@ -184,35 +257,49 @@ def calculate_rtpc_score(email_data):
     # Base score: 100
     # Penalties apply for negative signals.
     # Bonus applies for positive signals (Anti-Spam).
-    
+
     current_score = 100
-    
+
     if not email_data.get('smtp_check_success'):
         # If greylisted (soft bounce), penalty is less severe
         if email_data.get('is_greylisted'):
             current_score -= 20
         else:
-            current_score -= 50 # SRS: SMTP Fail -50
-    
-    if email_data.get('is_disposable'):
-        current_score -= 50 # SRS: Disposable -50
-        
-    if email_data.get('is_role_based'):
-        current_score -= 30 # SRS: Role-Based -30
+            current_score -= 30 # Reduced from -50
 
-    if email_data.get('has_anti_spam'):
-        current_score += 10 # SRS Line 171: DMARC/SPF Present | +10
-        
+    if email_data.get('is_disposable'):
+        current_score -= 50
+
+    if email_data.get('is_role_based'):
+        current_score -= 30
+
+    # Bonuses for SPF/DMARC (helps legit domains)
+    if email_data.get("has_spf"):
+        current_score += 5
+    if email_data.get("has_dmarc"):
+        current_score += 5
+
+    # Legacy field bonus (if still used)
+    if email_data.get('has_anti_spam') and not (email_data.get("has_spf") or email_data.get("has_dmarc")):
+         current_score += 5
+
     if email_data.get('bounce_history'):
-        current_score -= 40 # SRS: Bounce History -40
-        
+        current_score -= 40
+
     # Catch-All Penalty
     if email_data.get('is_catch_all'):
-        current_score -= 30 
-        # Cap score at 70 for catch-all (Risky)
-        if current_score > 70: current_score = 70
+        current_score -= 15 # Reduced from -30
+        # Cap score is removed or relaxed for now based on user feedback
+        # if current_score > 70: current_score = 70
+
+    if email_data.get('firewall_info'):
+        current_score -= 15 # New penalty for firewall
+
+    if email_data.get('is_spammy'):
+        current_score -= 40
 
     return max(0, min(100, current_score))
+
 
 def validate_email_single(email):
     out = {
@@ -229,12 +316,20 @@ def validate_email_single(email):
         "smtp_check": "Unknown",
         "smtp_check_success": False,
         "has_anti_spam": False,
+        "has_spf": False,
+        "has_dmarc": False,
+        "spam_filter": None,
         "bounce_history": False,
         "rtpc_score": 0,
         "status": "NOT DELIVERABLE",
         "recommendation": "DO NOT SEND",
-        "reason": ""
+        "reason": "",
+        "check_message": "",
+        "firewall_info": None,
+        "is_spammy": False,
+        "is_asian_region": False,
     }
+
 
     try:
         validate_email(email, check_deliverability=False)
@@ -270,7 +365,17 @@ def validate_email_single(email):
     out["domain_age_days"] = get_domain_age(dom)
     out["provider"] = get_provider(dom)
     
-    out["has_anti_spam"] = has_anti_spam(dom)
+    spf_status, dmarc_status = check_dns_security(dom)
+    # Map detailed status to boolean for backward compatibility/scoring
+    out["has_spf"] = spf_status != "None"
+    out["has_dmarc"] = dmarc_status != "None"
+    # Store detailed info in check_message or reason if helpful? 
+    # For now, just logging it into the result object if we had fields, 
+    # but sticking to requirements, we just improved the *logic* of finding them.
+    # We can append to check_message if verified
+    # out["check_message"] = f"SPF: {spf_status}, DMARC: {dmarc_status}" # Optional
+    
+    out["has_anti_spam"] = out["has_spf"] or out["has_dmarc"]
     
     # 1. Catch-All Probe
     # Only probe if not disposable and domain is valid
@@ -284,7 +389,35 @@ def validate_email_single(email):
     # 2. SMTP Check
     # If catch-all, we still check, but we know 250 is meaningless. 
     # But if 550, it is definitely invalid.
-    deliverable, code, msg = check_smtp_detailed(email)
+    deliverable, code, msg, banner = check_smtp_detailed(email)
+    out["check_message"] = msg
+
+
+    # Detect Spam Filter from MX (if valid domain)
+    if has_ms:
+        try:
+            mx_records = resolver.resolve(dom, 'MX')
+            mx_start = str(mx_records[0].exchange).lower()
+            out["spam_filter"] = detect_spam_filter(mx_start, banner)
+            # Use same logic for firewall_info
+            out["firewall_info"] = detect_firewall_info(mx_start, banner)
+        except:
+             out["spam_filter"] = None
+             out["firewall_info"] = None
+    else:
+        out["spam_filter"] = None
+        out["firewall_info"] = None
+
+    # Spammy & Asian region detection
+    out["is_spammy"] = out["is_disposable"] # Simplified for now, or add specific logic
+    try:
+        w = whois.whois(dom)
+        country = w.country
+        asian_countries = {"CN", "JP", "KR", "IN", "SG", "TH", "MY", "ID", "PH", "VN", "HK", "TW"}
+        out["is_asian_region"] = country in asian_countries if country else False
+    except Exception:
+        out["is_asian_region"] = False
+
     
     # Greylisting detection (4xx codes)
     if code and 400 <= code < 500:

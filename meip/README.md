@@ -1,6 +1,6 @@
-# MEIP - Meta-Insyt Email Intelligence Platform
+# NIMV - NHL Internal Mail Validator
 
-MEIP is an enterprise-grade, privacy-first email validation system designed for high accuracy and detailed intelligence. It moves beyond simple "Valid/Invalid" checks to provide deep insights into email infrastructure, security configurations, and deliverability risks.
+NIMV is an enterprise-grade, privacy-first email validation system designed for high accuracy and detailed intelligence. It moves beyond simple "Valid/Invalid" checks to provide deep insights into email infrastructure, security configurations, and deliverability risks.
 
 ## 🚀 Key Features
 
@@ -133,7 +133,7 @@ celery -A meip worker -l info
 
 ## ☁️ Running on Google Colab (For Testing)
 
-You can run MEIP in a Colab notebook for quick testing of the logic or even the full UI.
+You can run NIMV in a Colab notebook for quick testing of the logic or even the full UI.
 
 ### Option A: Logic Testing (Headless)
 Use this to test the validation engine without the UI.

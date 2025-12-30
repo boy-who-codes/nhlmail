@@ -57,6 +57,12 @@ class EmailResult(models.Model):
     smtp_check = models.CharField(max_length=20, default='Unknown') # Success, Fail, Unknown
     check_message = models.TextField(blank=True, null=True) # Detailed SMTP response
     has_anti_spam = models.BooleanField(default=False)
+    has_spf = models.BooleanField(default=False)
+    has_dmarc = models.BooleanField(default=False)
+    spam_filter = models.CharField(max_length=50, blank=True, null=True) # e.g. Barracuda, Mimecast
+    is_spammy = models.BooleanField(default=False)
+    is_asian_region = models.BooleanField(default=False)
+    firewall_info = models.CharField(max_length=100, blank=True, null=True)  # Firewall detection info
     bounce_history = models.BooleanField(default=False)
     
     rtpc_score = models.IntegerField(default=0)

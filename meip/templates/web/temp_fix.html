@@ -206,10 +206,8 @@
                                 <span
                                     class="px-1.5 py-0.5 rounded text-[10px] bg-red-500/10 text-red-400 border border-red-500/20">Disposable</span>
                                 {% endif %}
-                                {% if result.is_catch_all or result.catch_all == 'Yes' %}
-                                <span
-                                    class="px-1.5 py-0.5 rounded text-[10px] bg-orange-500/10 text-orange-400 border border-orange-500/20">Catch-All</span>
-                                {% elif result.catch_all == 'Possible' %}
+                                {% if result.catch_all == 'Yes' or result.catch_all == 'Possible' or result.is_catch_all
+                                %}
                                 <span
                                     class="px-1.5 py-0.5 rounded text-[10px] bg-orange-500/10 text-orange-400 border border-orange-500/20">Catch-All</span>
                                 {% endif %}

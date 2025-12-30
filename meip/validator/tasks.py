@@ -62,28 +62,34 @@ def process_batch_task(batch_id):
             res = validate_email_single(email)
             
             # Save result
-            er = EmailResult(
+            # Save result (Idempotent)
+            er, created = EmailResult.objects.update_or_create(
                 batch=batch,
                 email=email,
-                normalized_email=res['email'],
-                syntax_valid=res['syntax_valid'],
-                domain_valid=res['domain_valid'],
-                is_disposable=res['is_disposable'],
-                is_role_based=res['is_role_based'],
-                catch_all=res['catch_all'],
-                domain_age_days=res['domain_age_days'],
-                provider=res['provider'],
-                smtp_check=res['smtp_check'],
-                check_message=res.get('check_message', ''), 
-                has_anti_spam=res['has_anti_spam'],
-                bounce_history=res['bounce_history'],
-                rtpc_score=res['rtpc_score'],
-                status=res['status'],
-                recommendation=res['recommendation'],
-                reason=res['reason']
-            )
-            # Save immediately (or small buffer) to support robust pausing
-            er.save() 
+                defaults={
+                    'normalized_email': res['email'],
+                    'syntax_valid': res['syntax_valid'],
+                    'domain_valid': res['domain_valid'],
+                    'is_disposable': res['is_disposable'],
+                    'is_role_based': res['is_role_based'],
+                    'catch_all': res['catch_all'],
+                    'domain_age_days': res['domain_age_days'],
+                    'provider': res['provider'],
+                    'smtp_check': res['smtp_check'],
+                    'check_message': res.get('check_message', ''), 
+                    'has_anti_spam': res['has_anti_spam'],
+                    'has_spf': res.get('has_spf', False),
+                    'has_dmarc': res.get('has_dmarc', False),
+                    'firewall_info': res.get('firewall_info'),
+                    'is_spammy': res.get('is_spammy', False),
+                    'is_asian_region': res.get('is_asian_region', False),
+                    'bounce_history': res['bounce_history'],
+                    'rtpc_score': res['rtpc_score'],
+                    'status': res['status'],
+                    'recommendation': res['recommendation'],
+                    'reason': res['reason']
+                }
+            ) 
             processed_count += 1
             
             # Update batch progress periodically

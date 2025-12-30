@@ -85,6 +85,9 @@ DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.sqlite3',
         'NAME': BASE_DIR / 'db.sqlite3',
+        'OPTIONS': {
+            'timeout': 20, # Wait 20 seconds for lock release
+        }
     }
 }
 print(f"DEBUG: Active Database Path: {DATABASES['default']['NAME']}")

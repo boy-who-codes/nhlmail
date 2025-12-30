@@ -38,7 +38,10 @@
     {% if result %}
     <div class="bg-dark-800 border border-dark-700 rounded-xl overflow-hidden shadow-lg animate-fade-in-up">
         <div class="px-6 py-4 border-b border-dark-700 flex justify-between items-center bg-dark-900/50">
-            <h2 class="text-lg font-semibold text-white">Result</h2>
+            <div>
+                <h2 class="text-lg font-semibold text-white">Result</h2>
+                <p class="text-sm text-gray-400 font-mono">{{ result.email }}</p>
+            </div>
             <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-bold 
                 {% if result.status == 'DELIVERABLE' %}bg-green-500/10 text-green-500
                 {% elif result.status == 'RISKY' %}bg-yellow-500/10 text-yellow-500
