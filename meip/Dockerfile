@@ -1,37 +1,30 @@
-# Use official Python runtime as a parent image
-FROM python:3.12-slim
+# Base Image
+FROM python:3.10-slim
 
-# Set environment variables
-ENV PYTHONDONTWRITEBYTECODE=1
-ENV PYTHONUNBUFFERED=1
-
-# Set work directory
+# Set Working Directory
 WORKDIR /app
 
-# Install system dependencies
-# - whois: Required for python-whois
-# - netcat-openbsd: For wait-for-it scripts (optional but good practice)
-# - gcc/build-essential: For compiling python extensions if needed
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    whois \
-    netcat-openbsd \
-    gcc \
-    python3-dev \
+# Install System Dependencies
+# libpq-dev for potential postgres (optional), build-essential for compiling
+RUN apt-get update && apt-get install -y \
+    build-essential \
     && rm -rf /var/lib/apt/lists/*
 
-# Install python dependencies
+# Copy Requirements
 COPY requirements.txt /app/
-RUN pip install --upgrade pip && pip install -r requirements.txt
 
-# Copy project
+# Install Python Dependencies
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy Project Code
 COPY . /app/
 
-# Create non-root user for security (optional but recommended)
-# RUN useradd -m myuser
-# USER myuser
+# Environment Variables (Defaults, can be overridden)
+ENV PYTHONUNBUFFERED=1
+ENV DJANGO_SETTINGS_MODULE=meip.settings
 
-# Expose port
+# Expose Port
 EXPOSE 8000
 
-# Default command (can be overridden in docker-compose)
-CMD ["gunicorn", "--bind", "0.0.0.0:8000", "meip.wsgi:application"]
+# Default Command (Overridden by docker-compose)
+CMD ["python", "meip/manage.py", "runserver", "0.0.0.0:8000"]
