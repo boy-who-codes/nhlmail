@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Validation Report - Batch #{{ batch.id }}</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+
+        @media print {
+            .no-print {
+                display: none !important;
+            }
+
+            body {
+                background: white;
+                color: black;
+            }
+
+            .bg-dark-900 {
+                background: white !important;
+            }
+
+            .text-white {
+                color: black !important;
+            }
+
+            .text-gray-400 {
+                color: #4b5563 !important;
+            }
+
+            /* gray-600 */
+        }
+    </style>
+</head>
+
+<body class="bg-gray-50 text-gray-900 min-h-screen p-8 print:p-0">
+
+    <div class="max-w-4xl mx-auto bg-white shadow-xl print:shadow-none p-12 rounded-lg">
+
+        <!-- Header -->
+        <div class="flex justify-between items-start border-b pb-8 mb-8">
+            <div>
+                <h1 class="text-4xl font-bold text-gray-900">Validation Report</h1>
+                <p class="text-gray-500 mt-2">Prepared for Batch #{{ batch.id }}</p>
+            </div>
+            <div class="text-right">
+                <p class="text-sm text-gray-500">Date Generated</p>
+                <p class="font-medium">{% now "F j, Y" %}</p>
+                <p class="text-sm text-gray-500 mt-2">Analysis ID</p>
+                <p class="font-mono text-sm">{{ batch.id }}</p>
+            </div>
+        </div>
+
+        <!-- Executive Summary -->
+        <div class="mb-12">
+            <h2 class="text-2xl font-bold mb-6 text-gray-800">Executive Summary</h2>
+            <div class="grid grid-cols-4 gap-6">
+                <div class="p-4 bg-gray-50 rounded-lg text-center border">
+                    <p class="text-sm text-gray-500 uppercase tracking-wide">Processed</p>
+                    <p class="text-3xl font-bold text-blue-600">{{ total }}</p>
+                </div>
+                <div class="p-4 bg-green-50 rounded-lg text-center border border-green-100">
+                    <p class="text-sm text-green-600 uppercase tracking-wide">Deliverable</p>
+                    <p class="text-3xl font-bold text-green-700">{{ deliverable }}</p>
+                </div>
+                <div class="p-4 bg-red-50 rounded-lg text-center border border-red-100">
+                    <p class="text-sm text-red-600 uppercase tracking-wide">Undeliverable</p>
+                    <p class="text-3xl font-bold text-red-700">{{ undeliverable }}</p>
+                </div>
+                <div class="p-4 bg-yellow-50 rounded-lg text-center border border-yellow-100">
+                    <p class="text-sm text-yellow-600 uppercase tracking-wide">Risky</p>
+                    <p class="text-3xl font-bold text-yellow-700">{{ risky }}</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Protection & infrastructure -->
+        <div class="mb-12">
+            <h2 class="text-xl font-bold mb-6 text-gray-800">Infrastructure Analysis</h2>
+            <div class="grid grid-cols-2 gap-8">
+                <div>
+                    <h3 class="font-semibold text-gray-700 mb-3 border-b pb-2">Security Filters</h3>
+                    <ul class="space-y-2">
+                        <li class="flex justify-between">
+                            <span class="text-gray-600">Firewalls Detected:</span>
+                            <span class="font-medium">{{ reports.firewall }}</span>
+                        </li>
+                        <li class="flex justify-between">
+                            <span class="text-gray-600">Spam Traps / Honeypots:</span>
+                            <span class="font-medium text-red-600">{{ reports.spam_trap }}</span>
+                        </li>
+                        <li class="flex justify-between">
+                            <span class="text-gray-600">Disposable Domains:</span>
+                            <span class="font-medium text-orange-600">{{ reports.disposable }}</span>
+                        </li>
+                    </ul>
+                </div>
+                <div>
+                    <h3 class="font-semibold text-gray-700 mb-3 border-b pb-2">Domain Quality</h3>
+                    <ul class="space-y-2">
+                        <li class="flex justify-between">
+                            <span class="text-gray-600">Role-Based Accounts:</span>
+                            <span class="font-medium">{{ reports.role_based }}</span>
+                        </li>
+                        <li class="flex justify-between">
+                            <span class="text-gray-600">Catch-All Domains:</span>
+                            <span class="font-medium">{{ reports.catch_all }}</span>
+                        </li>
+                        <li class="flex justify-between">
+                            <span class="text-gray-600">Valid SPF Records:</span>
+                            <span class="font-medium text-green-600">{{ reports.spf_valid }}</span>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <!-- Recommendations -->
+        <div class="bg-blue-50 border border-blue-100 rounded-lg p-6 mb-8">
+            <h3 class="text-lg font-bold text-blue-900 mb-2">Agency Recommendation</h3>
+            <p class="text-blue-800 leading-relaxed">
+                Based on the analysis of {{ total }} contacts, we recommend removing the <strong>{{ undeliverable }}
+                    undeliverable</strong> contacts immediately to preserve sender reputation.
+                The <strong>{{ risky }} risky</strong> contacts should be segmented and warmed up cautiously.
+                {% if reports.spam_trap > 0 %}
+                <span class="block mt-2 text-red-700 font-bold">⚠️ CRITICAL: {{ reports.spam_trap }} confirmed spam
+                    traps were detected. These must be purged before any mailing.</span>
+                {% endif %}
+            </p>
+        </div>
+
+        <!-- Footer -->
+        <div class="text-center border-t pt-8 mt-12 text-gray-400 text-sm">
+            <p>Generated by NIMV - Internal Mail Validator</p>
+            <p class="mt-1">Confidential & Proprietary</p>
+        </div>
+
+    </div>
+
+    <!-- Print FAB -->
+    <button onclick="window.print()"
+        class="no-print fixed bottom-8 right-8 bg-blue-600 hover:bg-blue-700 text-white p-4 rounded-full shadow-lg transition-transform hover:scale-110 flex items-center gap-2 font-bold">
+        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z">
+            </path>
+        </svg>
+        Print Report
+    </button>
+
+</body>
+
+</html>

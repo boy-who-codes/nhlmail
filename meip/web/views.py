@@ -3,7 +3,7 @@ from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.http import JsonResponse, HttpResponse
 from django.db.models import Count, Avg
-from validator.models import ValidationBatch, EmailResult, SMTPSender, DisposableDomain, SystemConfig
+from validator.models import ValidationBatch, EmailResult, SMTPSender, DisposableDomain, SystemConfig, SpamTrap
 from validator.engine import validate_email_single
 from validator.tasks import process_batch_task
 import csv
@@ -29,7 +29,44 @@ def manual_validate(request):
     if request.method == 'POST':
         email = request.POST.get('email')
         if email:
-            result = validate_email_single(email)
+            try:
+                data = validate_email_single(email)
+                
+                # Convert dict to EmailResult object to enable properties
+                result = EmailResult(
+                    email=data.get('email', email),
+                    rtpc_score=data.get('rtpc_score', 0),
+                    status=data.get('status', 'UNKNOWN'),
+                    recommendation=data.get('recommendation', 'UNKNOWN'),
+                    
+                    # Infrastructure
+                    provider=data.get('provider') or data.get('mx_provider'),
+                    firewall_info=data.get('firewall_info'),
+                    catch_all='Yes' if data.get('is_catch_all') else 'No',
+                    domain_age_days=data.get('domain_age', 0),
+                    
+                    # SMTP
+                    smtp_check=data.get('smtp_check'),
+                    check_message=data.get('smtp_log') or str(data.get('smtp_check', '')),
+                    
+                    # Booleans
+                    is_disposable=data.get('is_disposable', False),
+                    is_role_based=data.get('is_role_based', False),
+                    is_spammy=data.get('is_spammy', False),
+                    has_spf=data.get('spf', False) or data.get('has_spf', False),
+                    has_dmarc=data.get('dmarc', False) or data.get('has_dmarc', False)
+                )
+            except Exception as e:
+                # Fallback error object
+                print(f"Manual Validation Error: {e}")
+                result = EmailResult(
+                    email=email,
+                    status='ERROR',
+                    rtpc_score=0,
+                    recommendation='ERROR',
+                    reason=str(e),
+                    smtp_check='Fail'
+                )
     
     return render(request, 'web/manual.html', {'result': result})
 
@@ -80,7 +117,12 @@ def upload_batch(request):
 def management(request):
     smtp_senders = SMTPSender.objects.all().order_by('-created_at')
     disposable_domains = DisposableDomain.objects.all().order_by('-created_at')
+    spam_traps = SpamTrap.objects.all().order_by('-created_at')
     proxy_config = SystemConfig.objects.filter(key='PROXY_URL').first()
+    
+    # Rotation Status
+    sender_count = smtp_senders.count()
+    rotation_active = sender_count > 1
     
     if request.method == 'POST':
         action = request.POST.get('action')
@@ -96,6 +138,13 @@ def management(request):
         elif action == 'delete_disposable':
             did = request.POST.get('id')
             DisposableDomain.objects.filter(id=did).delete()
+        elif action == 'add_trap':
+            email = request.POST.get('email')
+            desc = request.POST.get('description', '')
+            if email: SpamTrap.objects.get_or_create(email=email, defaults={'description': desc})
+        elif action == 'delete_trap':
+            tid = request.POST.get('id')
+            SpamTrap.objects.filter(id=tid).delete()
         elif action == 'update_proxy':
             url = request.POST.get('proxy_url')
             SystemConfig.objects.update_or_create(key='PROXY_URL', defaults={'value': url})
@@ -105,7 +154,10 @@ def management(request):
     return render(request, 'web/management.html', {
         'smtp_senders': smtp_senders,
         'disposable_domains': disposable_domains,
-        'proxy_url': proxy_config.value if proxy_config else ''
+        'spam_traps': spam_traps,
+        'proxy_url': proxy_config.value if proxy_config else '',
+        'sender_count': sender_count,
+        'rotation_active': rotation_active
     })
 
 def batch_detail(request, batch_id):
@@ -126,6 +178,14 @@ def batch_detail(request, batch_id):
         stats['disposable'] = results.filter(is_disposable=True).count() / total * 100
         stats['role_based'] = results.filter(is_role_based=True).count() / total * 100
         stats['smtp_success'] = results.filter(smtp_check='Success').count() / total * 100
+
+    # Detailed Counters for Dashboard Boxes
+    detailed_counts = {
+        'firewall': results.exclude(firewall_info__isnull=True).exclude(firewall_info__exact='').count(),
+        'catch_all': results.filter(catch_all='Yes').count(),
+        'role_based': results.filter(is_role_based=True).count(),
+        'spam_trap': results.filter(is_spammy=True).count()
+    }
         
     progress_percent = (batch.processed_emails / batch.total_emails * 100) if batch.total_emails > 0 else 0
         
@@ -133,7 +193,8 @@ def batch_detail(request, batch_id):
         'batch': batch, 
         'results': results, 
         'graph_stats': json.dumps(stats),
-        'progress_percent': progress_percent
+        'progress_percent': progress_percent,
+        'detailed_counts': detailed_counts
     })
 
 def export_batch_csv(request, batch_id):
@@ -142,21 +203,65 @@ def export_batch_csv(request, batch_id):
     response['Content-Disposition'] = f'attachment; filename="batch_{batch_id}_results.csv"'
     
     writer = csv.writer(response)
-    writer.writerow(['Email', 'Status', 'RTPC Score', 'Recommendation', 'Reason', 'Provider', 'Disposable', 'Role', 'Smtp Check', 'Firewall Info', 'SPF', 'DMARC', 'Spammy', 'Asian Region', 'Server Message'])
+    writer.writerow(['Email', 'Suggested Correction', 'Status', 'RTPC Score', 'Recommendation', 'Reason', 'Provider', 'Disposable', 'Role Based', 'Catch-All', 'SMTP Check', 'Firewall Detected', 'SPF', 'DMARC', 'Spam Trap', 'Asian Region', 'Server Message'])
     
     for r in batch.results.all():
         writer.writerow([
-            r.email, r.status, r.rtpc_score, r.recommendation, r.reason, 
-            r.provider, r.is_disposable, r.is_role_based, r.smtp_check,
-            r.firewall_info or '',
-            'Yes' if r.has_spf else 'No',
-            'Yes' if r.has_dmarc else 'No',
+            r.email, 
+            r.normalized_email if r.normalized_email != r.email else '',
+            r.status, 
+            r.rtpc_score, 
+            r.recommendation, 
+            r.reason, 
+            r.provider, 
+            'Yes' if r.is_disposable else 'No', 
+            'Yes' if r.is_role_based else 'No', 
+            r.catch_all,
+            r.smtp_check,
+            r.firewall_info or 'None',
+            'Pass' if r.has_spf else 'Fail',
+            'Pass' if r.has_dmarc else 'Fail',
             'Yes' if r.is_spammy else 'No',
             'Yes' if r.is_asian_region else 'No',
             r.check_message or ''
         ])
         
     return response
+
+def batch_report_view(request, batch_id):
+    batch = get_object_or_404(ValidationBatch, id=batch_id)
+    results = batch.results.all()
+    total = results.count()
+    
+    if total == 0:
+        return HttpResponse("No data available for report", status=400)
+
+    # Aggregates
+    stats = {
+        'deliverable': results.filter(status='DELIVERABLE').count(),
+        'undeliverable': results.filter(status='NOT DELIVERABLE').count(),
+        'risky': results.filter(status='RISKY').count()
+    }
+    
+    reports = {
+        'firewall': results.exclude(firewall_info__isnull=True).exclude(firewall_info__exact='').count(),
+        'spam_trap': results.filter(is_spammy=True).count(),
+        'disposable': results.filter(is_disposable=True).count(),
+        'role_based': results.filter(is_role_based=True).count(),
+        'catch_all': results.filter(catch_all='Yes').count(),
+        'spf_valid': results.filter(has_spf=True).count(),
+    }
+
+    context = {
+        'batch': batch,
+        'total': total,
+        'deliverable': stats['deliverable'],
+        'undeliverable': stats['undeliverable'],
+        'risky': stats['risky'],
+        'reports': reports
+    }
+    
+    return render(request, 'web/batch_report.html', context)
 
 from django.views.decorators.http import require_POST
 
@@ -279,3 +384,17 @@ def system_health_api(request):
         "active_processes": running_count,
         "worker_mode": "Multi-Threaded" if "threads" in str(settings.CELERY_BROKER_URL) or True else "Unknown" # Just a placeholder
     })
+
+def check_reputation_api(request):
+    """
+    API to check server IP reputation.
+    """
+    from validator.reputation import get_public_ip, check_ip_reputation
+    
+    proxy_config = SystemConfig.objects.filter(key='PROXY_URL').first()
+    proxy_url = proxy_config.value if proxy_config else None
+    
+    ip = get_public_ip(proxy_url)
+    results = check_ip_reputation(ip)
+    
+    return JsonResponse({'ip': ip, 'results': results})

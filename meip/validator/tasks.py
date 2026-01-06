@@ -61,6 +61,12 @@ def process_batch_task(batch_id):
 
             res = validate_email_single(email)
             
+            # Smart Throttling: Pause if 421 detected
+            if "421" in res.get('smtp_check', ''):
+                print(f"[!] Throttling detected for {email}. Sleeping 60s...")
+                import time
+                time.sleep(60)
+            
             # Save result
             # Save result (Idempotent)
             er, created = EmailResult.objects.update_or_create(

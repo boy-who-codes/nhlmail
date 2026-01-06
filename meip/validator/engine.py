@@ -8,29 +8,58 @@ from email_validator import validate_email, EmailNotValidError
 from django.conf import settings
 from functools import lru_cache
 import whois
-from .models import DisposableDomain, SMTPSender, SystemConfig
+from .models import DisposableDomain, SMTPSender, SystemConfig, SpamTrap
 import socks
 
 
-# Helper to get disposable domains
+# Professional Grade Disposable Domains List (Top 100+ Common Providers)
 def get_disposable_domains():
     try:
-        # Hybrid approach: Start with critical ones, then add DB ones
         defaults = {
-            "mailinator.com","10minutemail.com","10minutemail.net","10minutemail.org",
-            "tempmail.com","temp-mail.org","guerrillamail.com","guerrillamail.org",
-            "yopmail.com","yopmail.net","yopmail.fr","yopmail.gq"
+            "mailinator.com", "guerrillamail.com", "10minutemail.com", "tempmail.com", "yopmail.com",
+            "trashmail.com", "maildrop.cc", "throwawaymail.com", "getairmail.com", "dispostable.com",
+            "sharklasers.com", "guerrillamail.net", "guerrillamail.org", "guerrillamail.biz",
+            "grr.la", "guerrillamailblock.com", "spam4.me", "yopmail.net", "yopmail.fr", "yopmail.uk",
+            "cool.fr.nf", "jetable.fr.nf", "nospam.ze.tc", "nomail.xl.cx", "mega.zik.dj",
+            "speed.1s.fr", "courriel.fr.nf", "moncourrier.fr.nf", "monemail.fr.nf", "monmail.fr.nf",
+            "10minutemail.net", "10minutemail.org", "temp-mail.org", "temp-mail.ru", "temp-mail.info",
+            "1secmail.com", "1secmail.org", "1secmail.net", "fastmail.fm", "hushmail.com",
+            "mail-temp.com", "email-temp.com", "tempemail.net", "tempemail.co", "tempemail.biz",
+            "mytemp.email", "temp-mail.io", "tempmail.net", "tempmail.co", "tempmail.biz",
+            "mailnesia.com", "mailcatch.com", "incognitomail.org", "mohmal.com", "emailondeck.com",
+            "tempail.com", "luxusmail.org", "generator.email", "mintemail.com", "spambox.us",
+            "spamgourmet.com", "trashmail.net", "trashmail.me", "anonymbox.com", "anonbox.net",
+            "antichef.com", "antichef.net", "bouncr.com", "eadspost.com", "emailconf.com",
+            "emailengine.net", "emailengine.org", "emailproxsy.com", "faked.org", "fakemail.net",
+            "fakermail.com", "filzmail.com", "fleckens.hu", "get2mail.fr", "grr.la", "guerrillamail.de",
+            "my10minutemail.com", "neomailbox.com", "neomailbox.net", "netcourrier.com",
+            "nospam.today", "nospamfor.us", "nospam4.us", "nospamtable.com", "notmail.com"
         }
         db_domains = set(DisposableDomain.objects.values_list('domain', flat=True))
         return defaults.union(db_domains)
     except:
-        return {"mailinator.com"}
+        return {"mailinator.com", "yopmail.com", "tempmail.com"}
 
-# Load disposable domains
-# For performance, we'll cache this or load it per request, keeping it simple for now as function call
-
-
-ROLE_PREFIXES = {"admin","info","support","sales","contact","help","customercare","no-reply"}
+# Comprehensive Role-Based Prefixes (~60 Standard Roles)
+ROLE_PREFIXES = {
+    # Executives & Management
+    "admin", "administrator", "manager", "ceo", "cto", "cfo", "coo", "president", "director",
+    "founder", "owner", "management", "executive", "office", "secretary", "reception",
+    
+    # Operations & Support
+    "info", "support", "help", "sales", "contact", "enquiry", "inquiry", "questions",
+    "service", "care", "customercare", "helpdesk", "billing", "accounts", "accounting",
+    "finance", "invoice", "invoices", "orders", "returns", "shipping", "logistics", "operations",
+    
+    # Technical & IT
+    "webmaster", "hostmaster", "postmaster", "abuse", "noc", "security", "sysadmin", "system",
+    "it", "tech", "technical", "api", "dev", "developer", "engineering", "bugs", "error",
+    "ftp", "www", "ratelimit", "noreply", "no-reply", "donotreply", "notify", "alert", "alerts",
+    
+    # HR & Staff
+    "hr", "jobs", "careers", "recruitment", "hiring", "team", "staff", "all", "everyone",
+    "marketing", "press", "media", "pr", "legal", "compliance", "privacy", "gdpr"
+}
 
 @lru_cache(maxsize=10000)
 def base_domain(email):
@@ -77,12 +106,55 @@ def get_domain_age(domain):
 @lru_cache(maxsize=5000)
 def get_provider(domain):
     try:
-        mx = str(resolver.resolve(domain, "MX")[0].exchange).lower()
-        if "google" in mx: return "Google Workspace"
-        if "outlook" in mx or "microsoft" in mx: return "Microsoft 365"
-        if "zoho" in mx: return "Zoho"
-        return "Custom"
-    except:
+        mx_records = resolver.resolve(domain, "MX")
+        if not mx_records: return "None"
+        
+        # Sort by priority
+        mx_records = sorted(mx_records, key=lambda r: r.preference)
+        mx = str(mx_records[0].exchange).lower().strip('.')
+        
+        # Major Providers
+        if "google" in mx or "gmail" in mx: return "Google Workspace"
+        if "outlook" in mx or "microsoft" in mx or "hotmail" in mx: return "Microsoft 365"
+        if "zoho" in mx: return "Zoho Mail"
+        if "yahoodns" in mx or "yahoo" in mx: return "Yahoo Business"
+        if "amazonses" in mx: return "Amazon SES"
+        
+        # Hosting / Registrars
+        if "secureserver" in mx or "godaddy" in mx: return "GoDaddy"
+        if "privateemail" in mx or "jellyfish.systems" in mx or "registrar-servers" in mx: return "Namecheap"
+        if "spaceship" in mx or "spacemail" in mx: return "Spaceship"
+        if "name.com" in mx: return "Name.com"
+        if "unifiedlayer" in mx or "bluehost" in mx: return "Bluehost"
+        if "hostgator" in mx or "websitewelcome" in mx: return "HostGator"
+        if "dreamhost" in mx: return "DreamHost"
+        if "kundenserver" in mx or "ionos" in mx or "1and1" in mx: return "IONOS"
+        if "ovh" in mx: return "OVHcloud"
+        
+        # Security / Filters
+        if "pphosted" in mx: return "Proofpoint"
+        if "mimecast" in mx: return "Mimecast"
+        if "barracuda" in mx: return "Barracuda"
+        if "trendmicro" in mx: return "Trend Micro"
+        
+        # Privacy / Specialized
+        if "protonmail" in mx or "proton" in mx: return "ProtonMail"
+        if "tutanota" in mx: return "Tuta"
+        if "fastmail" in mx or "messagingengine" in mx: return "Fastmail"
+        if "rackspace" in mx or "emailsrvr" in mx: return "Rackspace"
+        if "icloud" in mx or "apple" in mx: return "Apple iCloud"
+        if "yandex" in mx: return "Yandex"
+        if "gmx" in mx: return "GMX"
+        if "mail.ru" in mx: return "Mail.ru"
+        
+        # Dynamic Fallback for Custom
+        # Try to extract the main domain from the MX record
+        parts = mx.split('.')
+        if len(parts) >= 2:
+            return f"{parts[-2].capitalize()}.{parts[-1]} (Custom)"
+            
+        return "Custom/Private"
+    except Exception as e:
         return "Unknown"
 
 def is_disposable(email):
@@ -142,16 +214,44 @@ def detect_spam_filter(mx_host, banner=None):
     
     content = f"{mx} {banner}"
     
+    # Enterprise Leaders
     if "pphosted" in content or "proofpoint" in content: return "Proofpoint"
     if "mimecast" in content: return "Mimecast"
-    if "barracuda" in content: return "Barracuda"
-    if "outlook" in content or "naming" in content or "microsoft" in content: return "Microsoft EOP"
-    if "google" in content: return "Google Postini"
-    if "messagelabs" in content or "symantec" in content: return "Broadcom/Symantec"
-    if "ironport" in content: return "Cisco IronPort"
-    if "trendmicro" in content: return "TrendMicro"
-    if "sophos" in content: return "Sophos"
+    if "barracuda" in content: return "Barracuda Networks"
+    if "protection.outlook.com" in content or "mail.protection.outlook" in content: return "Microsoft EOP (Exchange Online Protection)"
+    if "google.com" in content or "googlemail.com" in content: 
+        if "aspmx" in mx: return "Google Workspace (Standard)"
+        return "Google Postini/Cloud"
+
+    # Legacy & Heavy Iron
+    if "messagelabs" in content or "symantec" in content or "broadcom" in content: return "Symantec/Broadcom (MessageLabs)"
+    if "ironport" in content or "iphmx" in content or "cisco" in content: return "Cisco IronPort"
+    if "mcafee" in content or "mxlogic" in content: return "McAfee/Trellix"
+    if "trendmicro" in content or "intersame" in content: return "Trend Micro"
+    if "sophos" in content: return "Sophos Email Security"
+    if "forcepoint" in content or "mailcontrol" in content: return "Forcepoint (Websense)"
+    
+    # Cloud & Specialized
+    if "appriver" in content: return "AppRiver"
+    if "spamtitan" in content: return "SpamTitan"
+    if "fortimail" in content or "fortinet" in content: return "Fortinet FortiMail"
+    if "fireeye" in content: return "FireEye"
+    if "zscaler" in content: return "Zscaler"
+    if "checkpoint" in content or "cpcloud" in content: return "Check Point Harmony"
+    if "sonicwall" in content: return "SonicWall"
+    if "watchguard" in content: return "WatchGuard"
+    
+    # Hosting Security
+    if "secureserver" in content: return "GoDaddy Security"
+    if "spamexperts" in content: return "SpamExperts (SolarWinds)"
+    if "mailchannels" in content: return "MailChannels"
+    
+    # SaaS / Other
     if "sendgrid" in content: return "SendGrid"
+    if "mailgun" in content: return "Mailgun"
+    if "zoho" in content: return "Zoho Filters"
+    if "protonmail" in content: return "ProtonMail Guard"
+    
     return None
 
 def detect_firewall_info(mx_host, banner=None):
@@ -167,43 +267,85 @@ def check_catch_all(domain):
     # If a random user is accepted (250), it's a catch-all.
     return success
 
+# Global sender cycle iterator
+sender_cycle = None
+last_sender_update = 0
+
+def get_next_sender():
+    global sender_cycle, last_sender_update
+    import time
+    from itertools import cycle
+    
+    # Refresh cycle every 5 minutes or if empty
+    now = time.time()
+    if sender_cycle is None or (now - last_sender_update > 300):
+        try:
+             db_senders = list(SMTPSender.objects.filter(is_active=True).values_list('email', flat=True))
+             if not db_senders:
+                 # Fallback to settings
+                 db_senders = getattr(settings, 'SMTP_LIST', [])
+             
+             if db_senders:
+                 # Shuffle once on load to randomize start, then cycle
+                 random.shuffle(db_senders)
+                 sender_cycle = cycle(db_senders)
+                 last_sender_update = now
+        except:
+             pass
+
+    if sender_cycle:
+        try:
+            return next(sender_cycle)
+        except:
+            pass
+            
+    # Fallback to random if cycle fails
+    smtp_list = getattr(settings, 'SMTP_LIST', [])
+    if smtp_list: return random.choice(smtp_list)
+    return None
+
 def check_smtp_detailed(email):
     """Detailed SMTP check returning (is_success, code, message, banner)"""
     try:
-        try:
-            # 1. Get senders from DB
-            db_senders = list(SMTPSender.objects.filter(is_active=True).values_list('email', flat=True))
-            if db_senders:
-                smtp_list = db_senders
-            else:
-                # Strictly use settings, no hardcode fallback
-                smtp_list = getattr(settings, 'SMTP_LIST', [])
-                if not smtp_list: raise ValueError("No SMTP Senders available")
-        except Exception:
-             # Fallback if DB fails
-             smtp_list = getattr(settings, 'SMTP_LIST', [])
-             if not smtp_list: raise ValueError("No SMTP Senders available")
-
-        smtp_sender = random.choice(smtp_list)
+        smtp_sender = get_next_sender()
+        if not smtp_sender:
+             return False, 999, "Configuration Error: No Senders", ""
         
         # PROXY Handling (Simplified for brevity, assumes logic matches check_smtp)
-        proxy_config = SystemConfig.objects.filter(key="PROXY_URL").first()
         if proxy_config and proxy_config.value:
             try:
                 import socks
-                socks.set_default_proxy() 
-                socket.socket = ORIG_SOCKET 
-                p_url = proxy_config.value.replace("socks5://", "").replace("http://", "")
+                
+                # Parse Proxy URL
+                p_url = proxy_config.value.strip()
+                proxy_type = socks.SOCKS5 # Default
+                
+                if p_url.startswith("http://"):
+                    proxy_type = socks.HTTP
+                    p_url = p_url.replace("http://", "")
+                elif p_url.startswith("socks4://"):
+                    proxy_type = socks.SOCKS4
+                    p_url = p_url.replace("socks4://", "")
+                elif p_url.startswith("socks5://"):
+                    proxy_type = socks.SOCKS5
+                    p_url = p_url.replace("socks5://", "")
+                
+                # Parse Auth/Host
+                user, pwd = None, None
                 if "@" in p_url:
                     auth, end = p_url.split("@")
-                    user, pwd = auth.split(":")
+                    if ":" in auth:
+                        user, pwd = auth.split(":")
                     host, port = end.split(":")
                 else:
-                    user, pwd = None, None
                     host, port = p_url.split(":")
-                socks.set_default_proxy(socks.SOCKS5, host, int(port), True, user, pwd)
+                
+                # Apply Proxy
+                socks.set_default_proxy(proxy_type, host, int(port), True, user, pwd)
                 socket.socket = socks.socksocket
-            except:
+            except Exception as e:
+                # If proxy fails, we fall back to direct connection but SHOULD log it
+                print(f"Proxy Config Error: {e}")
                 socket.socket = ORIG_SOCKET
         else:
              if socket.socket != ORIG_SOCKET:
@@ -232,18 +374,51 @@ def check_smtp_detailed(email):
         except:
              helo_host = socket.getfqdn()
 
-        server = smtplib.SMTP(timeout=5)
+        server = smtplib.SMTP(timeout=10) # Increased timeout slightly for TLS
         # Capture banner
         connect_code, connect_msg = server.connect(mx_host)
         banner = str(connect_msg)
         
-        server.helo(helo_host)
+        # Identify with EHLO first for modern servers
+        try:
+            server.ehlo(helo_host)
+        except:
+            server.helo(helo_host)
+
+        # Opportunistic TLS
+        try:
+            if server.has_extn('STARTTLS'):
+                import ssl
+                # Create loose context - we want to talk, not verify perfect PKI
+                context = ssl.create_default_context()
+                context.check_hostname = False 
+                context.verify_mode = ssl.CERT_NONE
+                server.starttls(context=context)
+                server.ehlo(helo_host) # Re-identify after TLS
+        except Exception:
+            # If TLS fails (not supported or handshake error), proceed in plain text
+            pass
+
         server.mail(smtp_sender)
         code, msg = server.rcpt(email)
         server.quit()
+        
+        # 3. Analyze Response (Pattern Matching)
+        msg_str = str(msg).lower()
+        if code == 421 or "too many connections" in msg_str or "try again later" in msg_str:
+             return False, 421, "Throttled: Server busy or Rate limited", banner
+        
+        if "policy violation" in msg_str or "spam" in msg_str or "blocked" in msg_str or "blacklisted" in msg_str:
+             # It's a block, but the email might exist. 
+             # We return code, but msg is specific.
+             return False, code, f"Blocked: {msg}", banner
+
         return code == 250, code, msg, banner
     except (socket.timeout, socket.error, smtplib.SMTPException, dns.exception.Timeout) as e:
-        return False, 999, str(e), ""
+        err_str = str(e)
+        if "421" in err_str:
+             return False, 421, "Throttled: Connection Refused", ""
+        return False, 999, err_str, ""
     except Exception as e:
         return False, 999, str(e), ""
 
@@ -409,7 +584,13 @@ def validate_email_single(email):
         out["firewall_info"] = None
 
     # Spammy & Asian region detection
-    out["is_spammy"] = out["is_disposable"] # Simplified for now, or add specific logic
+    out["is_spammy"] = out["is_disposable"]
+    if not out["is_spammy"]:
+        try:
+            if SpamTrap.objects.filter(email=email).exists():
+                out["is_spammy"] = True
+        except:
+            pass
     try:
         w = whois.whois(dom)
         country = w.country

@@ -2,7 +2,7 @@
 
 {% block content %}
 <div class="max-w-3xl mx-auto space-y-8">
-    <div class="text-center">
+    <div class="text-center" id="manual-header">
         <h1 class="text-3xl font-bold text-white">Manual Email Validation</h1>
         <p class="text-gray-400 mt-2">Check a single email address instantly.</p>
     </div>
@@ -25,66 +25,216 @@
             </div>
         </form>
 
-        <!-- Loading Overlay -->
         <div id="loading-overlay"
             class="hidden absolute inset-0 bg-dark-900/80 flex flex-col items-center justify-center z-50 rounded-xl backdrop-blur-sm">
             <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-accent-500 mb-4"></div>
             <p class="text-white font-medium animate-pulse">Running 10-Layer Validation...</p>
         </div>
     </div>
-    <div class="relative"> <!-- Container for form relative positioning -->
-    </div>
+
+    <div class="relative"></div>
 
     {% if result %}
-    <div class="bg-dark-800 border border-dark-700 rounded-xl overflow-hidden shadow-lg animate-fade-in-up">
-        <div class="px-6 py-4 border-b border-dark-700 flex justify-between items-center bg-dark-900/50">
+    <div id="result-card"
+        class="bg-dark-800 border border-dark-700 rounded-xl overflow-hidden shadow-2xl animate-fade-in-up mt-8 print:shadow-none print:border-none print:bg-white print:text-black">
+
+        <div
+            class="px-8 py-6 border-b border-dark-700 flex justify-between items-start bg-dark-900/50 print:bg-white print:border-b-2 print:border-gray-200">
             <div>
-                <h2 class="text-lg font-semibold text-white">Result</h2>
-                <p class="text-sm text-gray-400 font-mono">{{ result.email }}</p>
-            </div>
-            <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-bold 
-                {% if result.status == 'DELIVERABLE' %}bg-green-500/10 text-green-500
-                {% elif result.status == 'RISKY' %}bg-yellow-500/10 text-yellow-500
-                {% else %}bg-red-500/10 text-red-500{% endif %}">
-                {{ result.status }}
-            </span>
-        </div>
-        <div class="p-6 grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div>
-                <p class="text-xs font-uppercase tracking-wider text-gray-500 mb-1">RTPC Score</p>
-                <div class="flex items-center space-x-2">
-                    <span class="text-4xl font-bold text-white">{{ result.rtpc_score }}</span>
-                    <span class="text-sm text-gray-400">/ 100</span>
+                <h2 class="text-2xl font-bold text-white print:text-black">Validation Report</h2>
+                <div class="flex items-center space-x-2 mt-1">
+                    <p class="text-gray-400 font-mono text-lg print:text-gray-600">
+                        {% if result.email %}{{ result.email }}{% endif %}
+                    </p>
+                    {% if result.normalized_email and result.normalized_email != result.email %}
+                    <span
+                        class="text-xs text-yellow-500 bg-yellow-500/10 px-2 py-0.5 rounded-full border border-yellow-500/20">Typo
+                        Fixed</span>
+                    {% endif %}
                 </div>
-                <p class="text-xs text-gray-500 mt-2">{{ result.reason }}</p>
             </div>
 
-            <div class="space-y-3">
-                <div class="flex justify-between text-sm">
-                    <span class="text-gray-400">Recommendation</span>
-                    <span class="text-white font-medium">{{ result.recommendation }}</span>
-                </div>
-                <div class="flex justify-between text-sm">
-                    <span class="text-gray-400">Provider</span>
-                    <span class="text-white font-medium">{{ result.provider|default:"Unknown" }}</span>
-                </div>
-                <div class="flex justify-between text-sm">
-                    <span class="text-gray-400">Disposable</span>
-                    <span
-                        class="{% if result.is_disposable %}text-red-500{% else %}text-green-500{% endif %} font-medium">
-                        {{ result.is_disposable|yesno:"Yes,No" }}
-                    </span>
-                </div>
-                <div class="flex justify-between text-sm">
-                    <span class="text-gray-400">SMTP Check</span>
-                    <span
-                        class="{% if result.smtp_check == 'Success' %}text-green-500{% elif result.smtp_check == 'Fail' %}text-red-500{% else %}text-gray-500{% endif %} font-medium">
-                        {{ result.smtp_check }}
-                    </span>
-                </div>
+            <div class="flex flex-col items-end">
+                <span
+                    class="inline-flex items-center px-4 py-1.5 rounded-full text-base font-bold shadow-sm {{ result.status_class }}">
+                    {{ result.status }}
+                </span>
+                <span class="text-xs text-gray-500 mt-2 print:hidden">{% now "M d, Y H:i" %}</span>
             </div>
         </div>
+
+        <div class="p-8 grid grid-cols-1 md:grid-cols-3 gap-0 divide-x divide-dark-700 print:divide-gray-200">
+
+            <!-- Column 1: RTPC & Recommendation -->
+            <div class="col-span-1 px-4 first:pl-0">
+                <div class="text-center md:text-left">
+                    <p class="text-xs font-bold uppercase tracking-widest text-gray-500 mb-2 print:text-gray-600">RTPC
+                        Confidence</p>
+                    <div class="flex items-baseline justify-center md:justify-start space-x-2">
+                        <span class="text-6xl font-black text-white print:text-black">{{ result.rtpc_score }}</span>
+                        <span class="text-xl text-gray-500">/100</span>
+                    </div>
+
+                    <div class="mt-6 space-y-3">
+                        <div
+                            class="flex justify-between text-sm border-b border-dark-700/50 pb-2 print:border-gray-100">
+                            <span class="text-gray-400 print:text-gray-600">Recommendation</span>
+                            <span class="font-bold text-white print:text-black">{{ result.recommendation }}</span>
+                        </div>
+                        <div
+                            class="flex justify-between text-sm border-b border-dark-700/50 pb-2 print:border-gray-100">
+                            <span class="text-gray-400 print:text-gray-600">SMTP Response</span>
+                            <span class="font-mono {{ result.smtp_class }}">
+                                {{ result.smtp_check }}
+                            </span>
+                        </div>
+                    </div>
+
+                    {% if result.check_message %}
+                    <div
+                        class="mt-6 p-4 bg-dark-900 rounded-lg border border-dark-600 text-xs font-mono text-gray-300 print:bg-gray-50 print:border-gray-200 print:text-gray-700">
+                        {{ result.check_message|truncatechars:100 }}
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Column 2: Infrastructure -->
+            <div class="col-span-1 px-4">
+                <h3 class="text-accent-500 font-bold mb-4 text-sm uppercase tracking-wide print:text-blue-600">
+                    Infrastructure</h3>
+                <ul class="space-y-3 text-sm">
+                    <li class="flex justify-between">
+                        <span class="text-gray-400 print:text-gray-600">Provider</span>
+                        <span class="text-white font-medium print:text-black">
+                            {% if result.provider %}
+                            {{ result.provider }}
+                            {% else %}
+                            Unknown
+                            {% endif %}
+                        </span>
+                    </li>
+                    <li class="flex justify-between">
+                        <span class="text-gray-400 print:text-gray-600">Firewall/Filter</span>
+                        <span class="text-white font-medium print:text-black" title="{{ result.firewall_info }}">
+                            {% if result.firewall_info %}
+                            {{ result.firewall_info }}
+                            {% else %}
+                            None Detected
+                            {% endif %}
+                        </span>
+                    </li>
+                    <li class="flex justify-between">
+                        <span class="text-gray-400 print:text-gray-600">Catch-All</span>
+                        <span class="{{ result.catch_all_class }} font-medium print:text-black">
+                            {% if result.catch_all %}{{ result.catch_all }}{% else %}No{% endif %}
+                        </span>
+                    </li>
+                    <li class="flex justify-between">
+                        <span class="text-gray-400 print:text-gray-600">Domain Age</span>
+                        <span class="text-white font-medium print:text-black">
+                            {{ result.domain_age_display }}
+                        </span>
+                    </li>
+                </ul>
+            </div>
+
+            <!-- Column 3: Threat Analysis -->
+            <div class="col-span-1 px-4 last:pr-0">
+                <h3 class="text-accent-500 font-bold mb-4 text-sm uppercase tracking-wide print:text-blue-600">Threat
+                    Analysis</h3>
+                <ul class="space-y-3 text-sm">
+                    <li class="flex justify-between">
+                        <span class="text-gray-400 print:text-gray-600">Spam Trap</span>
+                        <span class="{{ result.spammy_class }}">
+                            {{ result.is_spammy|yesno:"DETECTED,Clean" }}
+                        </span>
+                    </li>
+                    <li class="flex justify-between">
+                        <span class="text-gray-400 print:text-gray-600">Disposable</span>
+                        <span class="{{ result.disposable_class }}">
+                            {{ result.is_disposable|yesno:"Yes,No" }}
+                        </span>
+                    </li>
+                    <li class="flex justify-between">
+                        <span class="text-gray-400 print:text-gray-600">Role-Based</span>
+                        <span class="{{ result.role_class }}">
+                            {{ result.is_role_based|yesno:"Yes,No" }}
+                        </span>
+                    </li>
+                    <li class="flex justify-between">
+                        <span class="text-gray-400 print:text-gray-600">Authentication</span>
+                        <div class="flex space-x-2">
+                            <span class="text-xs px-1.5 py-0.5 rounded {{ result.spf_class }}">SPF</span>
+                            <span class="text-xs px-1.5 py-0.5 rounded {{ result.dmarc_class }}">DMARC</span>
+                        </div>
+                    </li>
+                </ul>
+            </div>
+
+        </div>
+
+        <div class="hidden print:block border-t border-gray-200 p-4 text-center text-xs text-gray-500">
+            Analysis performed by NIMV Internal Validator on {% now "F j, Y" %}
+        </div>
+    </div>
+
+    <div class="mt-6 flex justify-end space-x-4 print:hidden">
+        <button onclick="window.print()"
+            class="px-6 py-2 bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-700 hover:to-blue-600 text-white rounded-lg shadow-lg font-medium transition-all transform hover:scale-105 flex items-center gap-2">
+            <i class="fas fa-file-pdf"></i> Export Result to PDF
+        </button>
     </div>
     {% endif %}
+
+    <style>
+        @media print {
+            body {
+                background: white !important;
+                -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
+            }
+
+            nav,
+            footer,
+            form,
+            .active-task-reminder,
+            h1,
+            p.text-gray-400,
+            #loading-overlay,
+            #manual-header {
+                display: none !important;
+            }
+
+            .max-w-3xl {
+                max-width: 100% !important;
+                margin: 0 !important;
+            }
+
+            #result-card {
+                border: 1px solid #ddd;
+                box-shadow: none;
+                margin-top: 0;
+            }
+
+            .bg-dark-800.p-6 {
+                display: none !important;
+            }
+
+            .text-white {
+                color: black !important;
+            }
+
+            .text-gray-400 {
+                color: #666 !important;
+            }
+
+            .bg-dark-900 {
+                background: #f9fafb !important;
+                color: black !important;
+                border-color: #eee !important;
+            }
+        }
+    </style>
 </div>
 {% endblock %}

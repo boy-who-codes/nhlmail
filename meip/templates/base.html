@@ -5,6 +5,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>NIMV - NHL Internal Mail Validator</title>
+
+    <!-- Tailwind CSS (Styling) -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
         tailwind.config = {
@@ -29,6 +31,13 @@
             }
         }
     </script>
+
+    <!-- FontAwesome (Icons) -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <!-- Alpine.js (Interactivity/Hamburger Menu) -->
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.1/dist/cdn.min.js"></script>
+
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
 
@@ -39,26 +48,30 @@
 </head>
 
 <body class="bg-dark-900 text-gray-200 antialiased min-h-screen flex flex-col">
-    <nav class="border-b border-dark-700 bg-dark-800/50 backdrop-blur-md sticky top-0 z-50">
+    <nav class="border-b border-dark-700 bg-dark-800/50 backdrop-blur-md sticky top-0 z-50"
+        x-data="{ mobileOpen: false }">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div class="flex items-center justify-between h-16">
                 <div class="flex items-center">
                     <span class="text-xl font-bold tracking-tight text-white">NIMV</span>
-                    <div class="ml-10 flex items-baseline space-x-4">
-                        <a href="{% url 'dashboard' %}"
-                            class="px-3 py-2 rounded-md text-sm font-medium hover:bg-dark-700 hover:text-white transition-colors">Dashboard</a>
-                        <a href="{% url 'manual_validate' %}"
-                            class="px-3 py-2 rounded-md text-sm font-medium hover:bg-dark-700 hover:text-white transition-colors">Manual
-                            Check</a>
-                        <a href="{% url 'batch_list' %}"
-                            class="px-3 py-2 rounded-md text-sm font-medium hover:bg-dark-700 hover:text-white transition-colors">History</a>
-                        <a href="{% url 'management' %}"
-                            class="px-3 py-2 rounded-md text-sm font-medium hover:bg-dark-700 hover:text-white transition-colors">Settings</a>
+                    <div class="hidden md:block ml-10">
+                        <div class="flex items-baseline space-x-4">
+                            <a href="{% url 'dashboard' %}"
+                                class="px-3 py-2 rounded-md text-sm font-medium hover:bg-dark-700 hover:text-white transition-colors">Dashboard</a>
+                            <a href="{% url 'manual_validate' %}"
+                                class="px-3 py-2 rounded-md text-sm font-medium hover:bg-dark-700 hover:text-white transition-colors">Manual
+                                Check</a>
+                            <a href="{% url 'batch_list' %}"
+                                class="px-3 py-2 rounded-md text-sm font-medium hover:bg-dark-700 hover:text-white transition-colors">History</a>
+                            <a href="{% url 'management' %}"
+                                class="px-3 py-2 rounded-md text-sm font-medium hover:bg-dark-700 hover:text-white transition-colors">Settings</a>
+                        </div>
                     </div>
                 </div>
-                <div>
+
+                <div class="flex items-center gap-4">
                     <!-- System Health Indicator -->
-                    <div class="relative group">
+                    <div class="relative group hidden md:block">
                         <button id="health-btn"
                             class="flex items-center space-x-2 text-gray-300 hover:text-white px-3 py-2 rounded-md transition-colors text-sm font-medium">
                             <span class="w-2 h-2 rounded-full bg-green-500" id="health-status-dot"></span>
@@ -92,72 +105,130 @@
                         </div>
                     </div>
 
-                    <script>
-                        const healthBtn = document.getElementById('health-btn');
-                        const healthPopup = document.getElementById('health-popup');
+                    <!-- Mobile Menu Button -->
+                    <div class="-mr-2 flex md:hidden">
+                        <button @click="mobileOpen = !mobileOpen" type="button"
+                            class="bg-dark-800 inline-flex items-center justify-center p-2 rounded-md text-gray-400 hover:text-white hover:bg-dark-700 focus:outline-none">
+                            <span class="sr-only">Open main menu</span>
+                            <svg class="h-6 w-6" :class="{'hidden': mobileOpen, 'block': !mobileOpen }"
+                                xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+                                stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M4 6h16M4 12h16M4 18h16" />
+                            </svg>
+                            <svg class="h-6 w-6" :class="{'block': mobileOpen, 'hidden': !mobileOpen }"
+                                xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+                                stroke="currentColor">
+                                stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                        </button>
+                    </div>
+                </div>
 
-                        // Toggle Popup
-                        healthBtn.addEventListener('click', () => {
-                            healthPopup.classList.toggle('hidden');
-                        });
+            </div>
+        </div>
 
-                        // Close on click outside
-                        document.addEventListener('click', (e) => {
-                            if (!healthBtn.contains(e.target) && !healthPopup.contains(e.target)) {
-                                healthPopup.classList.add('hidden');
-                            }
-                        });
-
-                        // Poll Health API
-                        function updateHealth() {
-                            fetch('/api/system-health/')
-                                .then(r => r.json())
-                                .then(data => {
-                                    // Update Badge
-                                    const badge = document.getElementById('active-process-badge');
-                                    if (data.active_processes > 0) {
-                                        badge.innerText = data.active_processes;
-                                        badge.classList.remove('hidden');
-                                        badge.classList.add('animate-pulse');
-                                    } else {
-                                        badge.classList.add('hidden');
-                                        badge.classList.remove('animate-pulse');
-                                    }
-
-                                    // Update Status Dot/Text
-                                    const dot = document.getElementById('health-status-dot');
-                                    const sysStatus = document.getElementById('sys-status-text');
-
-                                    if (!data.redis_connected) {
-                                        dot.className = "w-2 h-2 rounded-full bg-red-500 animate-ping";
-                                        sysStatus.innerText = "Critical Error";
-                                        sysStatus.className = "text-red-500 font-bold";
-                                    } else if (data.active_processes > 0) {
-                                        dot.className = "w-2 h-2 rounded-full bg-accent-500 animate-pulse";
-                                        sysStatus.innerText = "Processing";
-                                        sysStatus.className = "text-accent-400";
-                                    } else {
-                                        dot.className = "w-2 h-2 rounded-full bg-green-500";
-                                        sysStatus.innerText = "Healthy";
-                                        sysStatus.className = "text-green-400";
-                                    }
-
-                                    // Update Details
-                                    document.getElementById('redis-status-text').innerText = data.redis_connected ? "Connected" : "Disconnected";
-                                    document.getElementById('redis-status-text').className = data.redis_connected ? "text-green-500" : "text-red-500 font-bold";
-                                    document.getElementById('worker-count-text').innerText = data.active_processes;
-                                })
-                                .catch(e => console.error("Health poll failed", e));
-                        }
-
-                        // Poll every 5s
-                        setInterval(updateHealth, 5000);
-                        updateHealth(); // Init
-                    </script>
+        <!-- Mobile Menu -->
+        <div class="md:hidden bg-dark-800 border-b border-dark-700"
+            :class="{'block': mobileOpen, 'hidden': !mobileOpen}">
+            <div class="px-2 pt-2 pb-3 space-y-1 sm:px-3">
+                <a href="{% url 'dashboard' %}"
+                    class="block px-3 py-2 rounded-md text-base font-medium text-gray-300 hover:text-white hover:bg-dark-700">Dashboard</a>
+                <a href="{% url 'manual_validate' %}"
+                    class="block px-3 py-2 rounded-md text-base font-medium text-gray-300 hover:text-white hover:bg-dark-700">Manual
+                    Check</a>
+                <a href="{% url 'batch_list' %}"
+                    class="block px-3 py-2 rounded-md text-base font-medium text-gray-300 hover:text-white hover:bg-dark-700">History</a>
+                <a href="{% url 'management' %}"
+                    class="block px-3 py-2 rounded-md text-base font-medium text-gray-300 hover:text-white hover:bg-dark-700">Settings</a>
+            </div>
+            <!-- Mobile Health Status -->
+            <div class="pt-4 pb-4 border-t border-dark-700">
+                <div class="flex items-center px-5">
+                    <div class="flex-shrink-0">
+                        <span class="w-2 h-2 rounded-full bg-green-500 inline-block"></span>
+                    </div>
+                    <div class="ml-3">
+                        <div class="text-base font-medium leading-none text-white">System Status</div>
+                        <div class="text-sm font-medium leading-none text-gray-400 mt-1" id="mobile-health-text">
+                            Checking...</div>
+                    </div>
                 </div>
             </div>
         </div>
     </nav>
+
+    <!-- Shared Health Script -->
+    <script>
+        const healthBtn = document.getElementById('health-btn');
+        const healthPopup = document.getElementById('health-popup');
+
+        // Toggle Popup
+        healthBtn.addEventListener('click', () => {
+            healthPopup.classList.toggle('hidden');
+        });
+
+        // Close on click outside
+        document.addEventListener('click', (e) => {
+            if (!healthBtn.contains(e.target) && !healthPopup.contains(e.target)) {
+                healthPopup.classList.add('hidden');
+            }
+        });
+
+        // Poll Health API
+        function updateHealth() {
+            fetch('/api/system-health/')
+                .then(r => r.json())
+                .then(data => {
+                    // Update Badge in Header
+                    const badge = document.getElementById('active-process-badge');
+                    if (data.active_processes > 0) {
+                        badge.innerText = data.active_processes;
+                        badge.classList.remove('hidden');
+                        badge.classList.add('animate-pulse');
+                    } else {
+                        badge.classList.add('hidden');
+                        badge.classList.remove('animate-pulse');
+                    }
+
+                    // Update Status Dot/Text in Header
+                    const dot = document.getElementById('health-status-dot');
+                    const sysStatus = document.getElementById('sys-status-text');
+
+                    // Update Mobile Status
+                    const mobileText = document.getElementById('mobile-health-text');
+
+                    if (!data.redis_connected) {
+                        dot.className = "w-2 h-2 rounded-full bg-red-500 animate-ping";
+                        sysStatus.innerText = "Critical Error";
+                        sysStatus.className = "text-red-500 font-bold";
+                        if (mobileText) mobileText.innerText = "Critical Error";
+                    } else if (data.active_processes > 0) {
+                        dot.className = "w-2 h-2 rounded-full bg-accent-500 animate-pulse";
+                        sysStatus.innerText = "Processing";
+                        sysStatus.className = "text-accent-400";
+                        if (mobileText) mobileText.innerText = "Processing...";
+                    } else {
+                        dot.className = "w-2 h-2 rounded-full bg-green-500";
+                        sysStatus.innerText = "Healthy";
+                        sysStatus.className = "text-green-400";
+                        if (mobileText) mobileText.innerText = "Healthy";
+                    }
+
+                    // Update Details
+                    document.getElementById('redis-status-text').innerText = data.redis_connected ? "Connected" : "Disconnected";
+                    document.getElementById('redis-status-text').className = data.redis_connected ? "text-green-500" : "text-red-500 font-bold";
+                    document.getElementById('worker-count-text').innerText = data.active_processes;
+                })
+                .catch(e => console.error("Health poll failed", e));
+        }
+
+        // Poll every 5s
+        setInterval(updateHealth, 5000);
+        updateHealth(); // Init
+    </script>
 
     <main class="flex-grow max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {% block content %}{% endblock %}

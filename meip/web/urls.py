@@ -8,6 +8,7 @@ urlpatterns = [
     path('upload/', views.upload_batch, name='upload_batch'),
     path('batch/<int:batch_id>/', views.batch_detail, name='batch_detail'),
     path('batch/<int:batch_id>/export', views.export_batch_csv, name='export_batch_csv'),
+    path('batch/<int:batch_id>/report/', views.batch_report_view, name='batch_report_view'),
     path('batch/<int:batch_id>/recheck/', views.recheck_batch, name='recheck_batch'),
     path('batch/<int:batch_id>/delete/', views.delete_batch, name='delete_batch'),
     path('batch/<int:batch_id>/pause/', views.pause_batch, name='pause_batch'),
@@ -16,4 +17,5 @@ urlpatterns = [
     path('batch/bulk-action/', views.batch_bulk_action, name='batch_bulk_action'),
     path('management/', views.management, name='management'),
     path('api/system-health/', views.system_health_api, name='system_health_api'),
+    path('api/reputation/', views.check_reputation_api, name='check_reputation_api'),
 ]
